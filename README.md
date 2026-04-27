@@ -75,6 +75,81 @@ Health check:
 GET /healthz
 ```
 
+## Docker Compose
+
+Docker Compose works on Windows and Linux and is the preferred local production-like setup.
+
+For the short setup path, see `QUICKSTART.md`.
+
+Use a Cloudflare named tunnel with a token. Do not use a temporary `trycloudflare.com` URL for normal use, because that URL changes every time and would force you to update the GitHub webhook repeatedly.
+
+The container cannot use `codex-cli` or `claude-cli` installed on your host by default. For Compose, use an API provider such as `openai-api`, or build a custom image that includes the CLI provider you want.
+
+For API-based Compose usage:
+
+```powershell
+cp config.docker.example.yml config.yml
+```
+
+Set these values in `.env`:
+
+```text
+GITHUB_APP_ID=...
+GITHUB_WEBHOOK_SECRET=...
+PORT=3000
+OPENAI_API_KEY=...
+CLOUDFLARED_TUNNEL_TOKEN=...
+```
+
+Keep the GitHub App private key at `./private-key.pem`; Compose mounts it as a Docker secret at runtime.
+
+One-time Cloudflare setup:
+
+1. Create a named tunnel in Cloudflare Zero Trust.
+2. Copy the tunnel token into `CLOUDFLARED_TUNNEL_TOKEN`.
+3. Create a Public Hostname for your domain.
+4. Set the Public Hostname service URL to the Compose service name:
+
+```text
+http://ai-reviewer:3000
+```
+
+Do not use `http://localhost:3000` for the Cloudflare container. Inside Docker, `localhost` would mean the `cloudflared` container itself.
+
+Then set the GitHub App webhook URL once:
+
+```text
+https://your-host/webhooks/github
+```
+
+Run only the app:
+
+```powershell
+npm run compose:up
+```
+
+Run the app plus Cloudflare Tunnel:
+
+```powershell
+npm run compose:up:tunnel
+```
+
+Both services use `restart: unless-stopped`, so after the first successful run Docker will restart them after a reboot as long as Docker itself starts.
+
+View logs:
+
+```powershell
+npm run compose:logs
+```
+
+Stop:
+
+```powershell
+npm run compose:down
+```
+
+With the tunnel profile, the public hostname stays fixed. You should not need to edit the GitHub webhook URL again unless you change domains or recreate the tunnel.
+
 ## Configuration
 
 Edit `config.yml` to choose the LLM provider, review limits, ignore patterns, review languages, and fix behavior.

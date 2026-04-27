@@ -1,0 +1,10 @@
+node_modules
+dist
+data
+repos/cache
+logs
+.git
+.idea
+.env
+*.log
+private-key.pem

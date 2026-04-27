@@ -1,0 +1,47 @@
+services:
+  ai-reviewer:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      CONFIG_PATH: /app/config.yml
+      GITHUB_PRIVATE_KEY_PATH: /run/secrets/github_private_key
+      PORT: 3000
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+    volumes:
+      - ./config.yml:/app/config.yml:ro
+      - ai-reviewer-data:/app/data
+      - ai-reviewer-repos:/app/repos
+    secrets:
+      - github_private_key
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TUNNEL_TOKEN}
+    depends_on:
+      ai-reviewer:
+        condition: service_healthy
+    profiles:
+      - tunnel
+
+secrets:
+  github_private_key:
+    file: ./private-key.pem
+
+volumes:
+  ai-reviewer-data:
+  ai-reviewer-repos:
