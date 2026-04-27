@@ -76,3 +76,16 @@ export function setPaused(db: Db, repoId: number, prNumber: number, paused: bool
   db.prepare("UPDATE pull_requests SET paused = ? WHERE repo_id = ? AND pr_number = ?")
     .run(paused ? 1 : 0, repoId, prNumber);
 }
+
+export function setLastSummaryCommentId(
+  db: Db,
+  repoId: number,
+  prNumber: number,
+  commentId: number
+): void {
+  db.prepare(`
+    UPDATE pull_requests
+    SET last_summary_comment_id = ?
+    WHERE repo_id = ? AND pr_number = ?
+  `).run(commentId, repoId, prNumber);
+}

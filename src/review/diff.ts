@@ -4,6 +4,7 @@ import { execa } from "execa";
 import simpleGit from "simple-git";
 import { minimatch } from "minimatch";
 import type { AppConfig } from "../config/schema.js";
+import { ReviewSkipError } from "./errors.js";
 
 export type DiffInfo = {
   diff: string;
@@ -48,10 +49,14 @@ export async function buildDiff(args: {
 
   const lineCount = [...changedLines.values()].reduce((sum, lines) => sum + lines.size, 0);
   if (changedFiles.length > args.config.review.max_changed_files) {
-    throw new Error(`PR has ${changedFiles.length} changed files, over max_changed_files`);
+    throw new ReviewSkipError(
+      `PR has ${changedFiles.length} changed files, over max_changed_files (${args.config.review.max_changed_files}).`
+    );
   }
   if (lineCount > args.config.review.max_changed_lines) {
-    throw new Error(`PR has ${lineCount} changed lines, over max_changed_lines`);
+    throw new ReviewSkipError(
+      `PR has ${lineCount} changed lines, over max_changed_lines (${args.config.review.max_changed_lines}).`
+    );
   }
 
   return { diff, changedFiles, changedLines };
