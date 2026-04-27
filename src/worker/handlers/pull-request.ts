@@ -1,14 +1,19 @@
+import pino from "pino";
 import type { Db } from "../../db/connection.js";
-import { upsertPullRequest, upsertRepository } from "../../db/review-state.js";
+import { setLastSummaryCommentId, upsertPullRequest, upsertRepository } from "../../db/review-state.js";
 import { getInstallationToken } from "../../github/auth.js";
 import { githubClient } from "../../github/client.js";
+import { upsertSummaryComment } from "../../github/comments.js";
 import { httpsCloneUrl, publicRemoteUrl } from "../../github/refs.js";
 import { collectContext } from "../../review/context.js";
 import { buildDiff, ensureRepoCache } from "../../review/diff.js";
+import { isReviewSkipError } from "../../review/errors.js";
 import { filterFindings } from "../../review/filter.js";
 import { publishReviewResult } from "../../review/publisher.js";
 import type { AppConfig } from "../../config/schema.js";
 import type { LlmAdapter } from "../../llm/adapter.js";
+
+const log = pino({ name: "pull-request-handler" });
 
 type PullRequestPayload = {
   action: string;
@@ -56,12 +61,31 @@ export async function handlePullRequestJob(args: {
     headSha
   });
 
-  const diff = await buildDiff({
-    repoPath: repo.clone_path,
-    fromSha,
-    toSha: headSha,
-    config
-  });
+  let diff;
+  try {
+    diff = await buildDiff({
+      repoPath: repo.clone_path,
+      fromSha,
+      toSha: headSha,
+      config
+    });
+  } catch (error) {
+    if (isReviewSkipError(error)) {
+      log.warn({ owner, repo: repoName, pullNumber, reason: error.message }, "review skipped");
+      const client = await githubClient(payload.installation.id);
+      const commentId = await upsertSummaryComment({
+        client,
+        owner,
+        repo: repoName,
+        issueNumber: pullNumber,
+        previousCommentId: pr.last_summary_comment_id,
+        body: formatSkipSummary(error.message)
+      });
+      setLastSummaryCommentId(db, repo.id, pullNumber, commentId);
+      return;
+    }
+    throw error;
+  }
   if (!diff.diff.trim()) {
     return;
   }
@@ -86,6 +110,7 @@ export async function handlePullRequestJob(args: {
   };
 
   const client = await githubClient(payload.installation.id);
+
   await publishReviewResult({
     db,
     client,
@@ -97,4 +122,13 @@ export async function handlePullRequestJob(args: {
     previousSummaryCommentId: pr.last_summary_comment_id,
     result
   });
+}
+
+function formatSkipSummary(reason: string): string {
+  return `<!-- ai-review-bot-summary -->
+## AI Review Skipped
+
+${reason}
+
+Adjust \`review.max_changed_files\` / \`review.max_changed_lines\` or split the PR to enable review.`;
 }
