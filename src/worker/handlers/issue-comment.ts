@@ -1,6 +1,13 @@
 import type { Db } from "../../db/connection.js";
 import { enqueueJob } from "../../db/jobs.js";
-import { setPaused, upsertPullRequest, upsertRepository } from "../../db/review-state.js";
+import {
+  getPullRequestRecord,
+  setPaused,
+  upsertPullRequest,
+  upsertRepository
+} from "../../db/review-state.js";
+import { githubClient } from "../../github/client.js";
+import { getPullRequest } from "../../github/pulls.js";
 
 type IssueCommentPayload = {
   action: string;
@@ -18,28 +25,55 @@ type IssueCommentPayload = {
   };
 };
 
-export function handleIssueCommentJob(db: Db, payload: IssueCommentPayload, botName: string): void {
+export async function handleIssueCommentJob(
+  db: Db,
+  payload: IssueCommentPayload,
+  botName: string
+): Promise<void> {
   if (payload.action !== "created" || !payload.issue.pull_request || !payload.installation?.id) return;
   const body = payload.comment.body.trim().toLowerCase();
   const mention = `@${botName.toLowerCase()}`;
   if (!body.startsWith(mention)) return;
 
   const owner = payload.repository.owner.login;
-  const repo = upsertRepository(db, owner, payload.repository.name, payload.installation.id);
-  const pr = upsertPullRequest(db, repo.id, payload.issue.number, "unknown", "unknown");
+  const repoName = payload.repository.name;
+  const prNumber = payload.issue.number;
+  const repo = upsertRepository(db, owner, repoName, payload.installation.id);
 
-  if (body.includes("pause")) setPaused(db, repo.id, payload.issue.number, true);
-  if (body.includes("resume")) setPaused(db, repo.id, payload.issue.number, false);
-  if (body.includes("review")) {
-    enqueueJob(db, "pull_request", {
-      action: body.includes("full") ? "opened" : "synchronize",
-      installation: payload.installation,
-      repository: payload.repository,
-      pull_request: {
-        number: pr.pr_number,
-        base: { sha: pr.base_sha },
-        head: { sha: pr.head_sha }
-      }
-    });
+  const wantsPause = body.includes("pause");
+  const wantsResume = body.includes("resume");
+  const wantsReview = body.includes("review");
+
+  if (wantsPause || wantsResume) {
+    const existing = getPullRequestRecord(db, repo.id, prNumber);
+    if (existing) {
+      if (wantsPause) setPaused(db, repo.id, prNumber, true);
+      if (wantsResume) setPaused(db, repo.id, prNumber, false);
+    }
   }
+
+  if (!wantsReview) return;
+
+  const existing = getPullRequestRecord(db, repo.id, prNumber);
+  let baseSha = existing?.base_sha;
+  let headSha = existing?.head_sha;
+
+  if (!baseSha || !headSha) {
+    const client = await githubClient(payload.installation.id);
+    const pull = await getPullRequest(client, owner, repoName, prNumber);
+    baseSha = pull.base.sha;
+    headSha = pull.head.sha;
+    upsertPullRequest(db, repo.id, prNumber, baseSha, headSha);
+  }
+
+  enqueueJob(db, "pull_request", {
+    action: body.includes("full") ? "opened" : "synchronize",
+    installation: payload.installation,
+    repository: payload.repository,
+    pull_request: {
+      number: prNumber,
+      base: { sha: baseSha },
+      head: { sha: headSha }
+    }
+  });
 }

@@ -1,7 +1,7 @@
 import pino from "pino";
 import type { AppConfig } from "../config/schema.js";
 import type { Db } from "../db/connection.js";
-import { claimNextJob, completeJob, failJob } from "../db/jobs.js";
+import { claimNextJob, completeJob, failJob, recoverStaleJobs } from "../db/jobs.js";
 import type { LlmAdapter } from "../llm/adapter.js";
 import { handleIssueCommentJob } from "./handlers/issue-comment.js";
 import { handlePullRequestJob } from "./handlers/pull-request.js";
@@ -14,6 +14,9 @@ export function startWorker(args: {
   llm: LlmAdapter;
   intervalMs?: number;
 }): NodeJS.Timeout {
+  const recovered = recoverStaleJobs(args.db);
+  if (recovered > 0) log.warn({ recovered }, "recovered stale running jobs on startup");
+
   const tick = async () => {
     const job = claimNextJob(args.db);
     if (!job) return;
@@ -23,7 +26,7 @@ export function startWorker(args: {
       if (job.event_type === "pull_request") {
         await handlePullRequestJob({ db: args.db, config: args.config, llm: args.llm, payload: payload as never });
       } else if (job.event_type === "issue_comment") {
-        handleIssueCommentJob(args.db, payload as never, args.config.bot.name);
+        await handleIssueCommentJob(args.db, payload as never, args.config.bot.name);
       }
       completeJob(args.db, job.id);
     } catch (error) {

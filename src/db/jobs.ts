@@ -7,6 +7,8 @@ export type Job = {
   attempts: number;
 };
 
+export const JOB_LOCK_TIMEOUT_MINUTES = 15;
+
 export function enqueueJob(db: Db, eventType: string, payload: unknown): number {
   const result = db.prepare(`
     INSERT INTO jobs (event_type, payload_json, status)
@@ -15,17 +17,29 @@ export function enqueueJob(db: Db, eventType: string, payload: unknown): number 
   return Number(result.lastInsertRowid);
 }
 
-export function claimNextJob(db: Db): Job | undefined {
+export function recoverStaleJobs(db: Db, timeoutMinutes = JOB_LOCK_TIMEOUT_MINUTES): number {
+  const result = db.prepare(`
+    UPDATE jobs
+    SET status = 'pending', locked_at = NULL
+    WHERE status = 'running'
+      AND (locked_at IS NULL OR datetime(locked_at) <= datetime('now', ?))
+  `).run(`-${timeoutMinutes} minutes`);
+  return result.changes;
+}
+
+export function claimNextJob(db: Db, timeoutMinutes = JOB_LOCK_TIMEOUT_MINUTES): Job | undefined {
   const tx = db.transaction(() => {
     const job = db.prepare(`
       SELECT id, event_type, payload_json, attempts
       FROM jobs
-      WHERE status = 'pending'
-        AND locked_at IS NULL
+      WHERE (
+              (status = 'pending' AND locked_at IS NULL)
+              OR (status = 'running' AND datetime(locked_at) <= datetime('now', ?))
+            )
         AND datetime(next_run_at) <= datetime('now')
       ORDER BY id
       LIMIT 1
-    `).get() as Job | undefined;
+    `).get(`-${timeoutMinutes} minutes`) as Job | undefined;
 
     if (!job) return undefined;
     db.prepare(`
