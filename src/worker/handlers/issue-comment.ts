@@ -1,3 +1,4 @@
+import type { AppConfig } from "../../config/schema.js";
 import type { Db } from "../../db/connection.js";
 import { enqueueJob } from "../../db/jobs.js";
 import {
@@ -25,11 +26,13 @@ type IssueCommentPayload = {
   };
 };
 
-export async function handleIssueCommentJob(
-  db: Db,
-  payload: IssueCommentPayload,
-  botName: string
-): Promise<void> {
+export async function handleIssueCommentJob(args: {
+  db: Db;
+  config: AppConfig;
+  payload: unknown;
+}): Promise<void> {
+  const payload = args.payload as IssueCommentPayload;
+  const botName = args.config.bot.name;
   if (payload.action !== "created" || !payload.issue.pull_request || !payload.installation?.id) return;
   const body = payload.comment.body.trim().toLowerCase();
   const mention = `@${botName.toLowerCase()}`;
@@ -38,23 +41,23 @@ export async function handleIssueCommentJob(
   const owner = payload.repository.owner.login;
   const repoName = payload.repository.name;
   const prNumber = payload.issue.number;
-  const repo = upsertRepository(db, owner, repoName, payload.installation.id);
+  const repo = upsertRepository(args.db, owner, repoName, payload.installation.id);
 
   const wantsPause = body.includes("pause");
   const wantsResume = body.includes("resume");
   const wantsReview = body.includes("review");
 
   if (wantsPause || wantsResume) {
-    const existing = getPullRequestRecord(db, repo.id, prNumber);
+    const existing = getPullRequestRecord(args.db, repo.id, prNumber);
     if (existing) {
-      if (wantsPause) setPaused(db, repo.id, prNumber, true);
-      if (wantsResume) setPaused(db, repo.id, prNumber, false);
+      if (wantsPause) setPaused(args.db, repo.id, prNumber, true);
+      if (wantsResume) setPaused(args.db, repo.id, prNumber, false);
     }
   }
 
   if (!wantsReview) return;
 
-  const existing = getPullRequestRecord(db, repo.id, prNumber);
+  const existing = getPullRequestRecord(args.db, repo.id, prNumber);
   let baseSha = existing?.base_sha;
   let headSha = existing?.head_sha;
 
@@ -63,10 +66,10 @@ export async function handleIssueCommentJob(
     const pull = await getPullRequest(client, owner, repoName, prNumber);
     baseSha = pull.base.sha;
     headSha = pull.head.sha;
-    upsertPullRequest(db, repo.id, prNumber, baseSha, headSha);
+    upsertPullRequest(args.db, repo.id, prNumber, baseSha, headSha);
   }
 
-  enqueueJob(db, "pull_request", {
+  enqueueJob(args.db, "pull_request", {
     action: body.includes("full") ? "opened" : "synchronize",
     installation: payload.installation,
     repository: payload.repository,

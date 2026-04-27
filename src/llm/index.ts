@@ -1,11 +1,25 @@
+import pino from "pino";
 import type { AppConfig } from "../config/schema.js";
+import type { ReviewInput, ReviewResult } from "../review/schema.js";
 import type { LlmAdapter } from "./adapter.js";
 import { ClaudeCliAdapter } from "./claude-cli.js";
 import { CodexCliAdapter } from "./codex-cli.js";
 import { OpenAiApiAdapter } from "./openai-api.js";
 
+const log = pino({ name: "llm" });
+
+type Provider = NonNullable<AppConfig["llm"]["fallback_provider"]>;
+
 export function createLlmAdapter(config: AppConfig): LlmAdapter {
-  switch (config.llm.provider) {
+  const primary = buildAdapter(config.llm.provider);
+  if (!config.llm.fallback_provider || config.llm.fallback_provider === config.llm.provider) {
+    return primary;
+  }
+  return new FallbackAdapter(primary, buildAdapter(config.llm.fallback_provider), config.llm.fallback_provider);
+}
+
+function buildAdapter(provider: Provider): LlmAdapter {
+  switch (provider) {
     case "claude-cli":
       return new ClaudeCliAdapter();
     case "codex-cli":
@@ -14,5 +28,22 @@ export function createLlmAdapter(config: AppConfig): LlmAdapter {
       return new OpenAiApiAdapter();
     case "anthropic-api":
       throw new Error("anthropic-api adapter is not implemented yet");
+  }
+}
+
+class FallbackAdapter implements LlmAdapter {
+  constructor(
+    private readonly primary: LlmAdapter,
+    private readonly fallback: LlmAdapter,
+    private readonly fallbackName: Provider
+  ) {}
+
+  async review(input: ReviewInput): Promise<ReviewResult> {
+    try {
+      return await this.primary.review(input);
+    } catch (err) {
+      log.warn({ err, fallback: this.fallbackName }, "primary llm failed, falling back");
+      return this.fallback.review(input);
+    }
   }
 }

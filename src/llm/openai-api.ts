@@ -1,6 +1,7 @@
-import { ReviewResultSchema, type ReviewInput, type ReviewResult } from "../review/schema.js";
+import type { ReviewInput, ReviewResult } from "../review/schema.js";
 import { buildReviewPrompt, readSystemPrompt } from "../review/prompt.js";
 import type { LlmAdapter } from "./adapter.js";
+import { parseReviewOutput } from "./shared.js";
 
 export class OpenAiApiAdapter implements LlmAdapter {
   async review(input: ReviewInput): Promise<ReviewResult> {
@@ -25,6 +26,6 @@ export class OpenAiApiAdapter implements LlmAdapter {
 
     if (!response.ok) throw new Error(`OpenAI API failed: ${response.status} ${await response.text()}`);
     const data = await response.json() as { output_text?: string };
-    return ReviewResultSchema.parse(JSON.parse(data.output_text ?? "{}"));
+    return parseReviewOutput(data.output_text ?? "{}");
   }
 }

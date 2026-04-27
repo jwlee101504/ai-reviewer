@@ -6,6 +6,8 @@ import { minimatch } from "minimatch";
 import type { AppConfig } from "../config/schema.js";
 import { ReviewSkipError } from "./errors.js";
 
+const GIT_DIFF_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
+
 export type DiffInfo = {
   diff: string;
   changedLines: Map<string, Set<number>>;
@@ -40,7 +42,7 @@ export async function buildDiff(args: {
 }): Promise<DiffInfo> {
   const { stdout } = await execa("git", ["diff", "--unified=80", `${args.fromSha}...${args.toSha}`], {
     cwd: args.repoPath,
-    maxBuffer: 20 * 1024 * 1024
+    maxBuffer: GIT_DIFF_MAX_BUFFER_BYTES
   });
   const parsed = parseUnifiedDiff(stdout);
   const changedFiles = parsed.changedFiles.filter((file) => !isIgnored(file, args.config.review.ignore));
