@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { config as loadDotEnv } from "dotenv";
 import Fastify from "fastify";
 import pino from "pino";
 import { loadConfig, requiredEnv } from "./config/load.js";
@@ -10,6 +10,7 @@ import { registerWebhook } from "./server/webhook.js";
 import { startWorker } from "./worker/runner.js";
 
 const log = pino({ name: "ai-review-bot" });
+loadDotEnv({ override: true });
 
 async function main(): Promise<void> {
   const config = loadConfig();

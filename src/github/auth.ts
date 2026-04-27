@@ -20,8 +20,9 @@ export async function getInstallationOctokit(installationId: number) {
 
 export async function getInstallationToken(installationId: number): Promise<string> {
   const app = getGitHubApp();
-  const { data } = await app.octokit.request("POST /app/installations/{installation_id}/access_tokens", {
-    installation_id: installationId
-  });
-  return data.token;
+  const auth = await app.octokit.auth({
+    type: "installation",
+    installationId
+  }) as { token: string };
+  return auth.token;
 }
