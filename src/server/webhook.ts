@@ -54,8 +54,7 @@ export async function registerWebhook(app: FastifyInstance, db: Db, secret: stri
       return reply.code(401).send({ error: "invalid signature" });
     }
 
-    const payload = JSON.parse(rawBody) as unknown;
-    const id = enqueueJob(db, eventType, payload);
+    const id = enqueueJob(db, eventType, rawBody);
     return reply.code(202).send({ queued: true, id });
   });
 }

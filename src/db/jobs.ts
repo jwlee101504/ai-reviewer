@@ -10,10 +10,11 @@ export type Job = {
 export const JOB_LOCK_TIMEOUT_MINUTES = 15;
 
 export function enqueueJob(db: Db, eventType: string, payload: unknown): number {
+  const json = typeof payload === "string" ? payload : JSON.stringify(payload);
   const result = db.prepare(`
     INSERT INTO jobs (event_type, payload_json, status)
     VALUES (?, ?, 'pending')
-  `).run(eventType, JSON.stringify(payload));
+  `).run(eventType, json);
   return Number(result.lastInsertRowid);
 }
 

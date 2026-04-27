@@ -8,12 +8,22 @@ import { handlePullRequestJob } from "./handlers/pull-request.js";
 
 const log = pino({ name: "worker" });
 
-export function startWorker(args: {
+export const WORKER_TICK_INTERVAL_MS = 2_000;
+
+type WorkerDeps = {
   db: Db;
   config: AppConfig;
   llm: LlmAdapter;
-  intervalMs?: number;
-}): NodeJS.Timeout {
+};
+
+type JobHandler = (deps: WorkerDeps, payload: unknown) => Promise<void>;
+
+const handlers: Record<string, JobHandler> = {
+  pull_request: (deps, payload) => handlePullRequestJob({ ...deps, payload }),
+  issue_comment: (deps, payload) => handleIssueCommentJob({ db: deps.db, config: deps.config, payload })
+};
+
+export function startWorker(args: WorkerDeps & { intervalMs?: number }): NodeJS.Timeout {
   const recovered = recoverStaleJobs(args.db);
   if (recovered > 0) log.warn({ recovered }, "recovered stale running jobs on startup");
 
@@ -22,11 +32,11 @@ export function startWorker(args: {
     if (!job) return;
 
     try {
-      const payload = JSON.parse(job.payload_json) as unknown;
-      if (job.event_type === "pull_request") {
-        await handlePullRequestJob({ db: args.db, config: args.config, llm: args.llm, payload: payload as never });
-      } else if (job.event_type === "issue_comment") {
-        await handleIssueCommentJob(args.db, payload as never, args.config.bot.name);
+      const handler = handlers[job.event_type];
+      if (!handler) {
+        log.warn({ jobId: job.id, eventType: job.event_type }, "no handler for event type, skipping");
+      } else {
+        await handler(args, JSON.parse(job.payload_json));
       }
       completeJob(args.db, job.id);
     } catch (error) {
@@ -37,7 +47,7 @@ export function startWorker(args: {
 
   const timer = setInterval(() => {
     tick().catch((error) => log.error({ err: error }, "worker tick failed"));
-  }, args.intervalMs ?? 2_000);
+  }, args.intervalMs ?? WORKER_TICK_INTERVAL_MS);
   void tick();
   return timer;
 }

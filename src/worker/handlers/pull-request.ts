@@ -28,9 +28,10 @@ export async function handlePullRequestJob(args: {
   db: Db;
   config: AppConfig;
   llm: LlmAdapter;
-  payload: PullRequestPayload;
+  payload: unknown;
 }): Promise<void> {
-  const { db, config, payload } = args;
+  const { db, config } = args;
+  const payload = args.payload as PullRequestPayload;
   if (!["opened", "reopened", "synchronize"].includes(payload.action)) return;
   if (payload.action !== "synchronize" && !config.review.auto_review) return;
   if (payload.action === "synchronize" && !config.review.auto_incremental_review) return;
