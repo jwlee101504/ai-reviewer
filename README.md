@@ -77,7 +77,7 @@ GET /healthz
 
 ## Configuration
 
-Edit `config.yml` to choose the LLM provider, review limits, ignore patterns, and fix behavior.
+Edit `config.yml` to choose the LLM provider, review limits, ignore patterns, review languages, and fix behavior.
 
 For `claude-cli`, the `claude` binary must be available in `PATH`.
 For `codex-cli`, the `codex` binary must be available in `PATH`.

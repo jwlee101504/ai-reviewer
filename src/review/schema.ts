@@ -27,6 +27,8 @@ export type ReviewInput = {
   headSha: string;
   diff: string;
   context: string;
+  analysisLanguage?: string;
+  responseLanguage?: string;
 };
 
 export type FixInput = {
