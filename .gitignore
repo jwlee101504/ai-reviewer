@@ -5,3 +5,4 @@ data/*.sqlite-*
 repos/cache/
 .env
 *.log
+private-key.pem
