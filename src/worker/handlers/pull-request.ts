@@ -98,7 +98,9 @@ export async function handlePullRequestJob(args: {
     baseSha: fromSha,
     headSha,
     diff: diff.diff,
-    context
+    context,
+    analysisLanguage: config.review.analysis_language,
+    responseLanguage: config.review.response_language
   });
   const result = {
     ...rawResult,

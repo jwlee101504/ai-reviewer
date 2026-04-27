@@ -10,6 +10,8 @@ export const ConfigSchema = z.object({
     max_changed_files: z.number().int().positive().default(80),
     max_changed_lines: z.number().int().positive().default(3000),
     min_confidence: z.number().min(0).max(1).default(0.65),
+    analysis_language: z.string().min(1).default("English"),
+    response_language: z.string().min(1).default("Korean"),
     ignore: z.array(z.string()).default([])
   }),
   llm: z.object({

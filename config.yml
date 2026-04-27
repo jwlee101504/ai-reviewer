@@ -7,6 +7,8 @@ review:
   max_changed_files: 80
   max_changed_lines: 3000
   min_confidence: 0.65
+  analysis_language: English
+  response_language: Korean
   ignore:
     - "dist/**"
     - "vendor/**"
