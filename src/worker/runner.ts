@@ -23,7 +23,7 @@ export function startWorker(args: {
       if (job.event_type === "pull_request") {
         await handlePullRequestJob({ db: args.db, config: args.config, llm: args.llm, payload: payload as never });
       } else if (job.event_type === "issue_comment") {
-        handleIssueCommentJob(args.db, payload as never, args.config.bot.name);
+        await handleIssueCommentJob(args.db, payload as never, args.config.bot.name);
       }
       completeJob(args.db, job.id);
     } catch (error) {

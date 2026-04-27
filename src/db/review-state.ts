@@ -53,6 +53,16 @@ export function upsertPullRequest(
   `).get(repoId, prNumber) as PullRequestRecord;
 }
 
+export function getPullRequestRecord(
+  db: Db,
+  repoId: number,
+  prNumber: number
+): PullRequestRecord | undefined {
+  return db.prepare(`
+    SELECT * FROM pull_requests WHERE repo_id = ? AND pr_number = ?
+  `).get(repoId, prNumber) as PullRequestRecord | undefined;
+}
+
 export function markReviewed(db: Db, repoId: number, prNumber: number, headSha: string, summaryCommentId?: number): void {
   db.prepare(`
     UPDATE pull_requests
