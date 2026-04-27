@@ -1,0 +1,25 @@
+bot:
+  name: my-ai-reviewer
+
+review:
+  auto_review: true
+  auto_incremental_review: true
+  max_changed_files: 80
+  max_changed_lines: 3000
+  min_confidence: 0.65
+  ignore:
+    - "dist/**"
+    - "vendor/**"
+    - "*.lock"
+
+llm:
+  provider: codex-cli
+  fallback_provider: claude-cli
+
+tools:
+  run_lint: true
+  run_tests: false
+
+fix:
+  enabled: true
+  push_mode: new_branch
