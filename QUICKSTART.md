@@ -36,8 +36,8 @@ https://your-host/webhooks/github
 GITHUB_APP_ID=...
 GITHUB_WEBHOOK_SECRET=...
 PORT=3000
-OPENAI_API_KEY=...
 CLOUDFLARED_TUNNEL_TOKEN=...
+CODEX_HOME_HOST=/mnt/c/Users/<you>/.codex
 ```
 
 GitHub App private key는 아래 위치에 둔다.
@@ -46,11 +46,7 @@ GitHub App private key는 아래 위치에 둔다.
 ./private-key.pem
 ```
 
-Docker Compose에서는 API 기반 LLM 설정을 쓴다.
-
-```powershell
-cp config.docker.example.yml config.yml
-```
+Docker Compose에서도 Codex CLI 로그인을 사용한다. `CODEX_HOME_HOST`는 Codex CLI의 `auth.json`이 들어 있는 호스트 디렉터리다.
 
 ## 2. 실행
 

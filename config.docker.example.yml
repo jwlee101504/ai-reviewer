@@ -15,7 +15,7 @@ review:
     - "*.lock"
 
 llm:
-  provider: openai-api
+  provider: codex-cli
 
 tools:
   run_lint: true

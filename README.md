@@ -83,13 +83,7 @@ For the short setup path, see `QUICKSTART.md`.
 
 Use a Cloudflare named tunnel with a token. Do not use a temporary `trycloudflare.com` URL for normal use, because that URL changes every time and would force you to update the GitHub webhook repeatedly.
 
-The container cannot use `codex-cli` or `claude-cli` installed on your host by default. For Compose, use an API provider such as `openai-api`, or build a custom image that includes the CLI provider you want.
-
-For API-based Compose usage:
-
-```powershell
-cp config.docker.example.yml config.yml
-```
+The Compose image installs `@openai/codex` and mounts your host Codex config directory so `codex-cli` can use your existing CLI subscription login. Set `CODEX_HOME_HOST` to the directory that contains `auth.json`.
 
 Set these values in `.env`:
 
@@ -97,8 +91,8 @@ Set these values in `.env`:
 GITHUB_APP_ID=...
 GITHUB_WEBHOOK_SECRET=...
 PORT=3000
-OPENAI_API_KEY=...
 CLOUDFLARED_TUNNEL_TOKEN=...
+CODEX_HOME_HOST=/mnt/c/Users/<you>/.codex
 ```
 
 Keep the GitHub App private key at `./private-key.pem`; Compose mounts it as a Docker secret at runtime.
