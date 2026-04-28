@@ -105,16 +105,20 @@ Keep the GitHub App private key at `./private-key.pem`; Compose mounts it as a D
 
 One-time Cloudflare setup:
 
-1. Create a named tunnel in Cloudflare Zero Trust.
-2. Copy the tunnel token into `CLOUDFLARED_TUNNEL_TOKEN`.
-3. Create a Public Hostname for your domain.
-4. Set the Public Hostname service URL to the Compose service name:
+1. Go to `Cloudflare Dashboard -> Networking -> Tunnels`.
+2. Create or select a named tunnel.
+3. Select `Add a replica`.
+4. Copy the `eyJ...` token from the generated `cloudflared ... --token ...` command into `CLOUDFLARED_TUNNEL_TOKEN`.
+5. Create a Public Hostname for your domain.
+6. Set the Public Hostname service URL to the Compose service name:
 
 ```text
 http://ai-reviewer:3000
 ```
 
 Do not use `http://localhost:3000` for the Cloudflare container. Inside Docker, `localhost` would mean the `cloudflared` container itself.
+
+If you are using the Cloudflare One dashboard instead, the tunnel page may be under `Networks -> Connectors -> Cloudflare Tunnels`.
 
 Then set the GitHub App webhook URL once:
 

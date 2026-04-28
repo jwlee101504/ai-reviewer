@@ -2,9 +2,23 @@
 
 ## 1. 최초 1회 설정
 
-Cloudflare에서 **Named Tunnel**을 만든다. `trycloudflare.com` 임시 터널은 쓰지 않는다.
+Cloudflare Dashboard에서 **Named Tunnel**을 만든다. `trycloudflare.com` 임시 터널은 쓰지 않는다.
 
-Cloudflare Zero Trust에서 tunnel token을 발급받고, Public Hostname의 service URL을 아래처럼 설정한다.
+현재 UI 기준 위치:
+
+```text
+Cloudflare Dashboard -> Networking -> Tunnels
+```
+
+Cloudflare One을 쓰는 경우에는 아래 경로일 수 있다.
+
+```text
+Cloudflare One -> Networks -> Connectors -> Cloudflare Tunnels
+```
+
+Tunnel에서 **Add a replica**를 눌러 실행 명령을 복사하고, `--token` 뒤의 `eyJ...` 값을 `.env`에 넣는다.
+
+Public Hostname의 service URL은 아래처럼 설정한다.
 
 ```text
 http://ai-reviewer:3000
