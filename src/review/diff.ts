@@ -116,7 +116,12 @@ function filterDiffFiles(diff: string, allowedFiles: string[]): string {
 
 function simpleGitWithToken(token: string, baseDir?: string) {
   const auth = Buffer.from(`x-access-token:${token}`).toString("base64");
-  return simpleGit(baseDir).env({
+  return simpleGit({
+    baseDir,
+    unsafe: {
+      allowUnsafeConfigEnvCount: true
+    }
+  }).env({
     ...process.env,
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_KEY_0: "http.https://github.com/.extraHeader",
