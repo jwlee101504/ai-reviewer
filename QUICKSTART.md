@@ -2,9 +2,23 @@
 
 ## 1. 최초 1회 설정
 
-Cloudflare에서 **Named Tunnel**을 만든다. `trycloudflare.com` 임시 터널은 쓰지 않는다.
+Cloudflare Dashboard에서 **Named Tunnel**을 만든다. `trycloudflare.com` 임시 터널은 쓰지 않는다.
 
-Cloudflare Zero Trust에서 tunnel token을 발급받고, Public Hostname의 service URL을 아래처럼 설정한다.
+현재 UI 기준 위치:
+
+```text
+Cloudflare Dashboard -> Networking -> Tunnels
+```
+
+Cloudflare One을 쓰는 경우에는 아래 경로일 수 있다.
+
+```text
+Cloudflare One -> Networks -> Connectors -> Cloudflare Tunnels
+```
+
+Tunnel에서 **Add a replica**를 눌러 실행 명령을 복사하고, `--token` 뒤의 `eyJ...` 값을 `.env`에 넣는다.
+
+Public Hostname의 service URL은 아래처럼 설정한다.
 
 ```text
 http://ai-reviewer:3000
@@ -22,8 +36,8 @@ https://your-host/webhooks/github
 GITHUB_APP_ID=...
 GITHUB_WEBHOOK_SECRET=...
 PORT=3000
-OPENAI_API_KEY=...
 CLOUDFLARED_TUNNEL_TOKEN=...
+CODEX_HOME_HOST=/mnt/c/Users/<you>/.codex
 ```
 
 GitHub App private key는 아래 위치에 둔다.
@@ -32,11 +46,7 @@ GitHub App private key는 아래 위치에 둔다.
 ./private-key.pem
 ```
 
-Docker Compose에서는 API 기반 LLM 설정을 쓴다.
-
-```powershell
-cp config.docker.example.yml config.yml
-```
+Docker Compose에서도 Codex CLI 로그인을 사용한다. `CODEX_HOME_HOST`는 Codex CLI의 `auth.json`이 들어 있는 호스트 디렉터리다.
 
 ## 2. 실행
 

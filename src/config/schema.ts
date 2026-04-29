@@ -3,7 +3,7 @@ import { z } from "zod";
 export const ConfigSchema = z.object({
   bot: z.object({
     name: z.string().default("my-ai-reviewer")
-  }),
+  }).default({}),
   review: z.object({
     auto_review: z.boolean().default(true),
     auto_incremental_review: z.boolean().default(true),
@@ -13,19 +13,19 @@ export const ConfigSchema = z.object({
     analysis_language: z.string().min(1).default("English"),
     response_language: z.string().min(1).default("Korean"),
     ignore: z.array(z.string()).default([])
-  }),
+  }).default({}),
   llm: z.object({
     provider: z.enum(["claude-cli", "codex-cli", "openai-api", "anthropic-api"]).default("claude-cli"),
     fallback_provider: z.enum(["claude-cli", "codex-cli", "openai-api", "anthropic-api"]).optional()
-  }),
+  }).default({}),
   tools: z.object({
     run_lint: z.boolean().default(false),
     run_tests: z.boolean().default(false)
-  }),
+  }).default({}),
   fix: z.object({
     enabled: z.boolean().default(false),
     push_mode: z.enum(["new_branch", "same_pr"]).default("new_branch")
-  })
+  }).default({})
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;

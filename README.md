@@ -83,13 +83,7 @@ For the short setup path, see `QUICKSTART.md`.
 
 Use a Cloudflare named tunnel with a token. Do not use a temporary `trycloudflare.com` URL for normal use, because that URL changes every time and would force you to update the GitHub webhook repeatedly.
 
-The container cannot use `codex-cli` or `claude-cli` installed on your host by default. For Compose, use an API provider such as `openai-api`, or build a custom image that includes the CLI provider you want.
-
-For API-based Compose usage:
-
-```powershell
-cp config.docker.example.yml config.yml
-```
+The Compose image installs `@openai/codex` and mounts your host Codex config directory so `codex-cli` can use your existing CLI subscription login. Set `CODEX_HOME_HOST` to the directory that contains `auth.json`.
 
 Set these values in `.env`:
 
@@ -97,24 +91,28 @@ Set these values in `.env`:
 GITHUB_APP_ID=...
 GITHUB_WEBHOOK_SECRET=...
 PORT=3000
-OPENAI_API_KEY=...
 CLOUDFLARED_TUNNEL_TOKEN=...
+CODEX_HOME_HOST=/mnt/c/Users/<you>/.codex
 ```
 
 Keep the GitHub App private key at `./private-key.pem`; Compose mounts it as a Docker secret at runtime.
 
 One-time Cloudflare setup:
 
-1. Create a named tunnel in Cloudflare Zero Trust.
-2. Copy the tunnel token into `CLOUDFLARED_TUNNEL_TOKEN`.
-3. Create a Public Hostname for your domain.
-4. Set the Public Hostname service URL to the Compose service name:
+1. Go to `Cloudflare Dashboard -> Networking -> Tunnels`.
+2. Create or select a named tunnel.
+3. Select `Add a replica`.
+4. Copy the `eyJ...` token from the generated `cloudflared ... --token ...` command into `CLOUDFLARED_TUNNEL_TOKEN`.
+5. Create a Public Hostname for your domain.
+6. Set the Public Hostname service URL to the Compose service name:
 
 ```text
 http://ai-reviewer:3000
 ```
 
 Do not use `http://localhost:3000` for the Cloudflare container. Inside Docker, `localhost` would mean the `cloudflared` container itself.
+
+If you are using the Cloudflare One dashboard instead, the tunnel page may be under `Networks -> Connectors -> Cloudflare Tunnels`.
 
 Then set the GitHub App webhook URL once:
 

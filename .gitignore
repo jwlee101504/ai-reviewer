@@ -6,3 +6,4 @@ repos/cache/
 .env
 *.log
 private-key.pem
+/.idea
