@@ -15,7 +15,7 @@ services:
       - ./config.yml:/app/config.yml:ro
       - ai-reviewer-data:/app/data
       - ai-reviewer-repos:/app/repos
-      - ${CODEX_HOME_HOST:?Set CODEX_HOME_HOST to your host Codex config directory}:/root/.codex:ro
+      - ${CODEX_HOME_HOST:?Set CODEX_HOME_HOST to your host Codex config directory}:/root/.codex
     secrets:
       - github_private_key
     healthcheck:
@@ -36,8 +36,6 @@ services:
     depends_on:
       ai-reviewer:
         condition: service_healthy
-    profiles:
-      - tunnel
 
 secrets:
   github_private_key:

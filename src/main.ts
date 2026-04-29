@@ -1,23 +1,23 @@
 import { config as loadDotEnv } from "dotenv";
 import Fastify from "fastify";
-import pino from "pino";
 import { loadConfig, requiredEnv } from "./config/load.js";
 import { openDb } from "./db/connection.js";
 import { migrate } from "./db/migrations.js";
+import { createLogger, loggerOptions } from "./logger.js";
 import { createLlmAdapter } from "./llm/index.js";
 import { registerHealth } from "./server/health.js";
 import { registerWebhook } from "./server/webhook.js";
 import { startWorker } from "./worker/runner.js";
 
-const log = pino({ name: "ai-review-bot" });
 loadDotEnv({ override: true });
+const log = createLogger("ai-review-bot");
 
 async function main(): Promise<void> {
   const config = loadConfig();
   const db = openDb();
   migrate(db);
 
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: loggerOptions("http") });
   await registerHealth(app);
   await registerWebhook(app, db, requiredEnv("GITHUB_WEBHOOK_SECRET"));
 

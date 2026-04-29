@@ -1,5 +1,6 @@
 import { ReviewResultSchema, type ReviewInput, type ReviewResult } from "../review/schema.js";
 import { buildReviewPrompt, readSystemPrompt } from "../review/prompt.js";
+import type { LlmTextUsage } from "./adapter.js";
 
 export const CLI_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
 
@@ -9,6 +10,14 @@ export function buildFullPrompt(input: ReviewInput): string {
 
 export function parseReviewOutput(raw: string): ReviewResult {
   return ReviewResultSchema.parse(JSON.parse(extractJson(raw)));
+}
+
+export function measureTextUsage(input: string, output: string): LlmTextUsage {
+  return {
+    inputChars: input.length,
+    outputChars: output.length,
+    totalChars: input.length + output.length
+  };
 }
 
 function extractJson(output: string): string {

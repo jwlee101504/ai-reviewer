@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
-import pino from "pino";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Db } from "../db/connection.js";
 import { enqueueJob } from "../db/jobs.js";
+import { createLogger } from "../logger.js";
 
-const log = pino({ name: "webhook" });
+const log = createLogger("webhook");
 
 type WebhookRequest = FastifyRequest<{
   Headers: {
@@ -55,6 +55,12 @@ export async function registerWebhook(app: FastifyInstance, db: Db, secret: stri
     }
 
     const id = enqueueJob(db, eventType, rawBody);
+    log.info({
+      jobId: id,
+      eventType,
+      delivery: request.headers["x-github-delivery"],
+      ...summarizeWebhookPayload(rawBody)
+    }, "webhook accepted");
     return reply.code(202).send({ queued: true, id });
   });
 }
@@ -67,4 +73,24 @@ function verifySignature(secret: string, body: string, signature: string): { ok:
   const expected = `sha256=${crypto.createHmac("sha256", secret).update(body).digest("hex")}`;
   if (expected.length !== signature.length) return { ok: false, expected };
   return { ok: crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature)), expected };
+}
+
+function summarizeWebhookPayload(rawBody: string): Record<string, unknown> {
+  try {
+    const payload = JSON.parse(rawBody) as {
+      action?: string;
+      repository?: { full_name?: string };
+      pull_request?: { number?: number; base?: { sha?: string }; head?: { sha?: string } };
+      issue?: { number?: number; pull_request?: unknown };
+    };
+    return {
+      action: payload.action,
+      repository: payload.repository?.full_name,
+      pullNumber: payload.pull_request?.number ?? (payload.issue?.pull_request ? payload.issue.number : undefined),
+      baseSha: payload.pull_request?.base?.sha,
+      headSha: payload.pull_request?.head?.sha
+    };
+  } catch {
+    return { payloadParseFailed: true };
+  }
 }
