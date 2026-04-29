@@ -1,17 +1,24 @@
 import type { Db } from "../../db/connection.js";
-import { setLastSummaryCommentId, upsertPullRequest, upsertRepository } from "../../db/review-state.js";
+import {
+  setLastSummaryCommentId,
+  upsertPullRequest,
+  upsertRepository,
+  type PullRequestRecord,
+  type RepoRecord
+} from "../../db/review-state.js";
 import { getInstallationToken } from "../../github/auth.js";
 import { githubClient } from "../../github/client.js";
 import { upsertSummaryComment } from "../../github/comments.js";
 import { publicRemoteUrl } from "../../github/refs.js";
 import { createLogger } from "../../logger.js";
 import { collectContext } from "../../review/context.js";
-import { buildDiff, ensureRepoCache } from "../../review/diff.js";
+import { buildDiff, ensureRepoCache, type DiffInfo } from "../../review/diff.js";
 import { isReviewSkipError } from "../../review/errors.js";
 import { filterFindings } from "../../review/filter.js";
 import { publishReviewResult } from "../../review/publisher.js";
 import type { AppConfig } from "../../config/schema.js";
 import type { LlmAdapter } from "../../llm/adapter.js";
+import type { ReviewResult } from "../../review/schema.js";
 
 const log = createLogger("pull-request-handler");
 
@@ -29,6 +36,17 @@ type PullRequestPayload = {
   };
 };
 
+type ReviewTarget = {
+  installationId: number;
+  owner: string;
+  repoName: string;
+  pullNumber: number;
+  repo: RepoRecord;
+  pr: PullRequestRecord;
+  fromSha: string;
+  headSha: string;
+};
+
 export async function handlePullRequestJob(args: {
   db: Db;
   config: AppConfig;
@@ -42,109 +60,155 @@ export async function handlePullRequestJob(args: {
   if (payload.action === "synchronize" && !config.review.auto_incremental_review) return;
   if (!payload.installation?.id) throw new Error("Missing installation id");
 
-  const owner = payload.repository.owner.login;
-  const repoName = payload.repository.name;
-  const pullNumber = payload.pull_request.number;
-  const repo = upsertRepository(db, owner, repoName, payload.installation.id);
-  const pr = upsertPullRequest(db, repo.id, pullNumber, payload.pull_request.base.sha, payload.pull_request.head.sha);
-  if (pr.paused) {
-    log.info({ owner, repo: repoName, pullNumber }, "review skipped because pull request is paused");
+  const target = prepareReviewTarget(db, payload);
+  if (target.pr.paused) {
+    log.info(reviewLogFields(target), "review skipped because pull request is paused");
     return;
   }
 
-  const fromSha = payload.action === "synchronize" && pr.last_reviewed_sha
-    ? pr.last_reviewed_sha
-    : payload.pull_request.base.sha;
-  const headSha = payload.pull_request.head.sha;
   const reviewStartedAt = Date.now();
-
-  log.info({ owner, repo: repoName, pullNumber, action: payload.action, fromSha, headSha }, "review started");
-
-  const token = await getInstallationToken(payload.installation.id);
-  const cacheStartedAt = Date.now();
-  const remoteUrl = publicRemoteUrl(owner, repoName);
-  await ensureRepoCache({
-    remoteUrl,
-    token,
-    publicUrl: remoteUrl,
-    clonePath: repo.clone_path,
-    headSha
-  });
   log.info({
-    owner,
-    repo: repoName,
-    pullNumber,
-    clonePath: repo.clone_path,
-    durationMs: Date.now() - cacheStartedAt
-  }, "repository cache ready");
+    ...reviewLogFields(target),
+    action: payload.action,
+    fromSha: target.fromSha,
+    headSha: target.headSha
+  }, "review started");
+
+  await ensureReviewCache(target);
 
   let diff;
   try {
-    const diffStartedAt = Date.now();
-    diff = await buildDiff({
-      repoPath: repo.clone_path,
-      fromSha,
-      toSha: headSha,
-      config
-    });
-    log.info({
-      owner,
-      repo: repoName,
-      pullNumber,
-      changedFiles: diff.changedFiles.length,
-      changedLines: diff.changedLines.size,
-      diffChars: diff.diff.length,
-      durationMs: Date.now() - diffStartedAt
-    }, "diff built");
+    diff = await buildReviewDiff(target, config);
   } catch (error) {
     if (isReviewSkipError(error)) {
-      log.warn({ owner, repo: repoName, pullNumber, reason: error.message }, "review skipped");
-      const client = await githubClient(payload.installation.id);
-      const commentId = await upsertSummaryComment({
-        client,
-        owner,
-        repo: repoName,
-        issueNumber: pullNumber,
-        previousCommentId: pr.last_summary_comment_id,
-        body: formatSkipSummary(error.message)
-      });
-      setLastSummaryCommentId(db, repo.id, pullNumber, commentId);
+      await publishSkipSummary(db, target, error.message);
       return;
     }
     throw error;
   }
   if (!diff.diff.trim()) {
-    log.info({ owner, repo: repoName, pullNumber }, "review skipped because diff is empty");
+    log.info(reviewLogFields(target), "review skipped because diff is empty");
     return;
   }
 
-  const contextStartedAt = Date.now();
-  const context = collectContext(repo.clone_path, diff.changedFiles);
+  const context = collectReviewContext(target, diff);
+  const result = await runReview(args.llm, target, diff, context, config);
+  const client = await githubClient(target.installationId);
+
+  const publishStartedAt = Date.now();
+  await publishReviewResult({
+    db,
+    client,
+    owner: target.owner,
+    repo: target.repoName,
+    repoId: target.repo.id,
+    pullNumber: target.pullNumber,
+    headSha: target.headSha,
+    previousSummaryCommentId: target.pr.last_summary_comment_id,
+    result
+  });
   log.info({
+    ...reviewLogFields(target),
+    findings: result.findings.length,
+    durationMs: Date.now() - publishStartedAt,
+    totalDurationMs: Date.now() - reviewStartedAt
+  }, "review published");
+}
+
+function prepareReviewTarget(db: Db, payload: PullRequestPayload): ReviewTarget {
+  const installationId = payload.installation?.id;
+  if (!installationId) throw new Error("Missing installation id");
+
+  const owner = payload.repository.owner.login;
+  const repoName = payload.repository.name;
+  const pullNumber = payload.pull_request.number;
+  const repo = upsertRepository(db, owner, repoName, installationId);
+  const pr = upsertPullRequest(db, repo.id, pullNumber, payload.pull_request.base.sha, payload.pull_request.head.sha);
+  const fromSha = payload.action === "synchronize" && pr.last_reviewed_sha
+    ? pr.last_reviewed_sha
+    : payload.pull_request.base.sha;
+
+  return {
+    installationId,
     owner,
-    repo: repoName,
+    repoName,
     pullNumber,
+    repo,
+    pr,
+    fromSha,
+    headSha: payload.pull_request.head.sha
+  };
+}
+
+async function ensureReviewCache(target: ReviewTarget): Promise<void> {
+  const token = await getInstallationToken(target.installationId);
+  const cacheStartedAt = Date.now();
+  const remoteUrl = publicRemoteUrl(target.owner, target.repoName);
+  await ensureRepoCache({
+    remoteUrl,
+    token,
+    publicUrl: remoteUrl,
+    clonePath: target.repo.clone_path,
+    headSha: target.headSha
+  });
+  log.info({
+    ...reviewLogFields(target),
+    clonePath: target.repo.clone_path,
+    durationMs: Date.now() - cacheStartedAt
+  }, "repository cache ready");
+}
+
+async function buildReviewDiff(target: ReviewTarget, config: AppConfig): Promise<DiffInfo> {
+  const diffStartedAt = Date.now();
+  const diff = await buildDiff({
+    repoPath: target.repo.clone_path,
+    fromSha: target.fromSha,
+    toSha: target.headSha,
+    config
+  });
+  log.info({
+    ...reviewLogFields(target),
+    changedFiles: diff.changedFiles.length,
+    changedLines: diff.changedLines.size,
+    diffChars: diff.diff.length,
+    durationMs: Date.now() - diffStartedAt
+  }, "diff built");
+  return diff;
+}
+
+function collectReviewContext(target: ReviewTarget, diff: DiffInfo): string {
+  const contextStartedAt = Date.now();
+  const context = collectContext(target.repo.clone_path, diff.changedFiles);
+  log.info({
+    ...reviewLogFields(target),
     contextChars: context.length,
     changedFiles: diff.changedFiles.length,
     durationMs: Date.now() - contextStartedAt
   }, "review context collected");
+  return context;
+}
 
-  const llmResponse = await args.llm.review({
-    owner,
-    repo: repoName,
-    pullNumber,
-    baseSha: fromSha,
-    headSha,
-    repoPath: repo.clone_path,
+async function runReview(
+  llm: LlmAdapter,
+  target: ReviewTarget,
+  diff: DiffInfo,
+  context: string,
+  config: AppConfig
+): Promise<ReviewResult> {
+  const llmResponse = await llm.review({
+    owner: target.owner,
+    repo: target.repoName,
+    pullNumber: target.pullNumber,
+    baseSha: target.fromSha,
+    headSha: target.headSha,
+    repoPath: target.repo.clone_path,
     diff: diff.diff,
     context,
     analysisLanguage: config.review.analysis_language,
     responseLanguage: config.review.response_language
   });
   log.info({
-    owner,
-    repo: repoName,
-    pullNumber,
+    ...reviewLogFields(target),
     provider: llmResponse.provider,
     model: llmResponse.model,
     durationMs: llmResponse.durationMs,
@@ -163,36 +227,34 @@ export async function handlePullRequestJob(args: {
     })
   };
   log.info({
-    owner,
-    repo: repoName,
-    pullNumber,
+    ...reviewLogFields(target),
     rawFindings: rawResult.findings.length,
     filteredFindings: result.findings.length,
     minConfidence: config.review.min_confidence
   }, "review findings filtered");
+  return result;
+}
 
-  const client = await githubClient(payload.installation.id);
-
-  const publishStartedAt = Date.now();
-  await publishReviewResult({
-    db,
+async function publishSkipSummary(db: Db, target: ReviewTarget, reason: string): Promise<void> {
+  log.warn({ ...reviewLogFields(target), reason }, "review skipped");
+  const client = await githubClient(target.installationId);
+  const commentId = await upsertSummaryComment({
     client,
-    owner,
-    repo: repoName,
-    repoId: repo.id,
-    pullNumber,
-    headSha,
-    previousSummaryCommentId: pr.last_summary_comment_id,
-    result
+    owner: target.owner,
+    repo: target.repoName,
+    issueNumber: target.pullNumber,
+    previousCommentId: target.pr.last_summary_comment_id,
+    body: formatSkipSummary(reason)
   });
-  log.info({
-    owner,
-    repo: repoName,
-    pullNumber,
-    findings: result.findings.length,
-    durationMs: Date.now() - publishStartedAt,
-    totalDurationMs: Date.now() - reviewStartedAt
-  }, "review published");
+  setLastSummaryCommentId(db, target.repo.id, target.pullNumber, commentId);
+}
+
+function reviewLogFields(target: ReviewTarget): { owner: string; repo: string; pullNumber: number } {
+  return {
+    owner: target.owner,
+    repo: target.repoName,
+    pullNumber: target.pullNumber
+  };
 }
 
 function formatSkipSummary(reason: string): string {
