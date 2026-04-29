@@ -4,7 +4,7 @@ import { setLastSummaryCommentId, upsertPullRequest, upsertRepository } from "..
 import { getInstallationToken } from "../../github/auth.js";
 import { githubClient } from "../../github/client.js";
 import { upsertSummaryComment } from "../../github/comments.js";
-import { httpsCloneUrl, publicRemoteUrl } from "../../github/refs.js";
+import { publicRemoteUrl } from "../../github/refs.js";
 import { collectContext } from "../../review/context.js";
 import { buildDiff, ensureRepoCache } from "../../review/diff.js";
 import { isReviewSkipError } from "../../review/errors.js";
@@ -55,9 +55,11 @@ export async function handlePullRequestJob(args: {
   const headSha = payload.pull_request.head.sha;
 
   const token = await getInstallationToken(payload.installation.id);
+  const remoteUrl = publicRemoteUrl(owner, repoName);
   await ensureRepoCache({
-    cloneUrl: httpsCloneUrl(owner, repoName, token),
-    publicUrl: publicRemoteUrl(owner, repoName),
+    remoteUrl,
+    token,
+    publicUrl: remoteUrl,
     clonePath: repo.clone_path,
     headSha
   });

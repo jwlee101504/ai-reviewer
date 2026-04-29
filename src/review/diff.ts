@@ -15,19 +15,20 @@ export type DiffInfo = {
 };
 
 export async function ensureRepoCache(args: {
-  cloneUrl: string;
+  remoteUrl: string;
+  token: string;
   publicUrl: string;
   clonePath: string;
   headSha: string;
 }): Promise<void> {
   fs.mkdirSync(path.dirname(args.clonePath), { recursive: true });
   if (!fs.existsSync(path.join(args.clonePath, ".git"))) {
-    await simpleGit().clone(args.cloneUrl, args.clonePath, ["--no-checkout"]);
+    await simpleGitWithToken(args.token).clone(args.remoteUrl, args.clonePath, ["--no-checkout"]);
   }
   const git = simpleGit(args.clonePath);
   try {
-    await git.remote(["set-url", "origin", args.cloneUrl]);
-    await git.fetch(["--all", "--prune"]);
+    await git.remote(["set-url", "origin", args.remoteUrl]);
+    await simpleGitWithToken(args.token, args.clonePath).fetch(["--all", "--prune"]);
     await git.checkout(args.headSha);
   } finally {
     await git.remote(["set-url", "origin", args.publicUrl]);
@@ -111,4 +112,19 @@ function filterDiffFiles(diff: string, allowedFiles: string[]): string {
       return match ? allowed.has(match[1].trim()) : false;
     })
     .join("");
+}
+
+function simpleGitWithToken(token: string, baseDir?: string) {
+  const auth = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return simpleGit({
+    baseDir,
+    unsafe: {
+      allowUnsafeConfigEnvCount: true
+    }
+  }).env({
+    ...process.env,
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.https://github.com/.extraHeader",
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${auth}`
+  });
 }

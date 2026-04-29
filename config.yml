@@ -16,7 +16,6 @@ review:
 
 llm:
   provider: codex-cli
-  fallback_provider: claude-cli
 
 tools:
   run_lint: true
