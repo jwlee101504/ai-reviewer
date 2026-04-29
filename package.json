@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "compose:up": "docker compose up -d --build",
-    "compose:up:tunnel": "docker compose --profile tunnel up -d --build",
+    "compose:up:tunnel": "docker compose up -d --build",
     "compose:logs": "docker compose logs -f ai-reviewer cloudflared",
     "compose:down": "docker compose down",
     "test": "vitest run",

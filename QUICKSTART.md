@@ -50,13 +50,13 @@ Docker Compose에서도 Codex CLI 로그인을 사용한다. `CODEX_HOME_HOST`�
 
 ## 2. 실행
 
-앱만 실행:
+앱과 Cloudflare Tunnel 같이 실행:
 
 ```powershell
 npm run compose:up
 ```
 
-앱과 Cloudflare Tunnel 같이 실행:
+기존 명령도 alias로 유지된다:
 
 ```powershell
 npm run compose:up:tunnel
