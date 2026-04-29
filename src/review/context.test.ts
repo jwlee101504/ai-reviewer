@@ -44,6 +44,19 @@ describe("collectContext", () => {
     expect(context).toContain("import { service }");
     expect(context).toContain("# Changed file snippets");
   });
+
+  it("stops test discovery after the result budget is reached", () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-review-context-"));
+    write("src/generated/file-240.ts", "export function lateFile() { return 1; }");
+    for (let index = 0; index < 250; index += 1) {
+      write(`src/generated/file-${index}.test.ts`, index === 240 ? "late related test body" : `export const value${index} = ${index};`);
+    }
+
+    const context = collectContext(tempDir, ["src/generated/file-240.ts"]);
+
+    expect(context).toContain("src/generated/file-0.test.ts");
+    expect(context).not.toContain("late related test body");
+  });
 });
 
 function write(relativePath: string, content: string): void {

@@ -12,6 +12,10 @@ const EXCLUDED_DIRS = new Set([
   "node_modules",
   "repos"
 ]);
+const MAX_TEST_FILES = 200;
+const MAX_TEST_SEARCH_FILES = 5_000;
+const MAX_TEST_SEARCH_DEPTH = 8;
+const MAX_TREE_ENTRIES = 120;
 
 export function collectContext(repoPath: string, changedFiles: string[]): string {
   const packageJson = summarizePackageJson(readIfExists(path.join(repoPath, "package.json")));
@@ -77,10 +81,11 @@ function readFirstExisting(repoPath: string, files: string[]): string | undefine
 function summarizeDirectoryTree(repoPath: string): string {
   const lines: string[] = [];
   walkDirectory(repoPath, "", 0, lines);
-  return lines.slice(0, 120).join("\n");
+  return lines.join("\n");
 }
 
 function walkDirectory(root: string, relativeDir: string, depth: number, lines: string[]): void {
+  if (lines.length >= MAX_TREE_ENTRIES) return;
   if (depth > 2) return;
   const absoluteDir = path.join(root, relativeDir);
   let entries: fs.Dirent[];
@@ -91,6 +96,7 @@ function walkDirectory(root: string, relativeDir: string, depth: number, lines: 
   }
 
   for (const entry of entries.sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name))) {
+    if (lines.length >= MAX_TREE_ENTRIES) return;
     if (entry.isDirectory() && EXCLUDED_DIRS.has(entry.name)) continue;
     const relativePath = toRepoPath(path.join(relativeDir, entry.name));
     lines.push(`${"  ".repeat(depth)}${entry.isDirectory() ? relativePath + "/" : relativePath}`);
@@ -102,14 +108,25 @@ function walkDirectory(root: string, relativeDir: string, depth: number, lines: 
 
 function findTestFiles(repoPath: string): string[] {
   const result: string[] = [];
-  walkFiles(repoPath, "", result, (file) => (
+  const budget = { visitedFiles: 0 };
+  walkFiles(repoPath, "", result, budget, (file) => (
     /(^|\/)(__tests__|test|tests)\//.test(file) ||
     /\.(test|spec)\.[cm]?[jt]sx?$/.test(file)
   ));
-  return result.slice(0, 200);
+  return result;
 }
 
-function walkFiles(root: string, relativeDir: string, result: string[], include: (file: string) => boolean): void {
+function walkFiles(
+  root: string,
+  relativeDir: string,
+  result: string[],
+  budget: { visitedFiles: number },
+  include: (file: string) => boolean
+): void {
+  if (result.length >= MAX_TEST_FILES || budget.visitedFiles >= MAX_TEST_SEARCH_FILES) return;
+  const depth = relativeDir ? relativeDir.split("/").length : 0;
+  if (depth > MAX_TEST_SEARCH_DEPTH) return;
+
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(path.join(root, relativeDir), { withFileTypes: true });
@@ -118,12 +135,16 @@ function walkFiles(root: string, relativeDir: string, result: string[], include:
   }
 
   for (const entry of entries) {
+    if (result.length >= MAX_TEST_FILES || budget.visitedFiles >= MAX_TEST_SEARCH_FILES) return;
     if (entry.isDirectory() && EXCLUDED_DIRS.has(entry.name)) continue;
     const relativePath = toRepoPath(path.join(relativeDir, entry.name));
     if (entry.isDirectory()) {
-      walkFiles(root, relativePath, result, include);
-    } else if (include(relativePath)) {
-      result.push(relativePath);
+      walkFiles(root, relativePath, result, budget, include);
+    } else {
+      budget.visitedFiles += 1;
+      if (include(relativePath)) {
+        result.push(relativePath);
+      }
     }
   }
 }
