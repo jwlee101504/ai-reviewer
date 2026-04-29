@@ -40,7 +40,7 @@ export async function buildDiff(args: {
   toSha: string;
   config: AppConfig;
 }): Promise<DiffInfo> {
-  const { stdout } = await execa("git", ["diff", "--unified=80", `${args.fromSha}...${args.toSha}`], {
+  const { stdout } = await execa("git", ["diff", "--unified=20", "--function-context", `${args.fromSha}...${args.toSha}`], {
     cwd: args.repoPath,
     maxBuffer: GIT_DIFF_MAX_BUFFER_BYTES
   });
