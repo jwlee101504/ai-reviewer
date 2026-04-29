@@ -16,6 +16,8 @@ export class CodexCliAdapter implements LlmAdapter {
         "--skip-git-repo-check",
         "--sandbox",
         "read-only",
+        "--cd",
+        input.repoPath,
         "--output-last-message",
         outputFile,
         "-"

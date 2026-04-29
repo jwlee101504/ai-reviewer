@@ -9,6 +9,7 @@ describe("buildReviewPrompt", () => {
       pullNumber: 1,
       baseSha: "base",
       headSha: "head",
+      repoPath: "/repo",
       diff: "+const value = 1;",
       context: "context",
       analysisLanguage: "English",

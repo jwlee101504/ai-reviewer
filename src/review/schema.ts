@@ -25,6 +25,7 @@ export type ReviewInput = {
   pullNumber: number;
   baseSha: string;
   headSha: string;
+  repoPath: string;
   diff: string;
   context: string;
   analysisLanguage?: string;
