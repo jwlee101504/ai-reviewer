@@ -100,6 +100,7 @@ export async function handlePullRequestJob(args: {
     pullNumber,
     baseSha: fromSha,
     headSha,
+    repoPath: repo.clone_path,
     diff: diff.diff,
     context,
     analysisLanguage: config.review.analysis_language,
