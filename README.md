@@ -120,13 +120,13 @@ Then set the GitHub App webhook URL once:
 https://your-host/webhooks/github
 ```
 
-Run only the app:
+Run the app plus Cloudflare Tunnel:
 
 ```powershell
 npm run compose:up
 ```
 
-Run the app plus Cloudflare Tunnel:
+`compose:up:tunnel` is kept as a backwards-compatible alias:
 
 ```powershell
 npm run compose:up:tunnel
@@ -146,7 +146,7 @@ Stop:
 npm run compose:down
 ```
 
-With the tunnel profile, the public hostname stays fixed. You should not need to edit the GitHub webhook URL again unless you change domains or recreate the tunnel.
+With the named tunnel, the public hostname stays fixed. You should not need to edit the GitHub webhook URL again unless you change domains or recreate the tunnel.
 
 ## Configuration
 
