@@ -3,7 +3,7 @@ import { setLastSummaryCommentId, upsertPullRequest, upsertRepository } from "..
 import { getInstallationToken } from "../../github/auth.js";
 import { githubClient } from "../../github/client.js";
 import { upsertSummaryComment } from "../../github/comments.js";
-import { httpsCloneUrl, publicRemoteUrl } from "../../github/refs.js";
+import { publicRemoteUrl } from "../../github/refs.js";
 import { createLogger } from "../../logger.js";
 import { collectContext } from "../../review/context.js";
 import { buildDiff, ensureRepoCache } from "../../review/diff.js";
@@ -62,9 +62,11 @@ export async function handlePullRequestJob(args: {
 
   const token = await getInstallationToken(payload.installation.id);
   const cacheStartedAt = Date.now();
+  const remoteUrl = publicRemoteUrl(owner, repoName);
   await ensureRepoCache({
-    cloneUrl: httpsCloneUrl(owner, repoName, token),
-    publicUrl: publicRemoteUrl(owner, repoName),
+    remoteUrl,
+    token,
+    publicUrl: remoteUrl,
     clonePath: repo.clone_path,
     headSha
   });
@@ -133,6 +135,7 @@ export async function handlePullRequestJob(args: {
     pullNumber,
     baseSha: fromSha,
     headSha,
+    repoPath: repo.clone_path,
     diff: diff.diff,
     context,
     analysisLanguage: config.review.analysis_language,
