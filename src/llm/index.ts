@@ -1,12 +1,12 @@
-import pino from "pino";
 import type { AppConfig } from "../config/schema.js";
-import type { ReviewInput, ReviewResult } from "../review/schema.js";
-import type { LlmAdapter } from "./adapter.js";
+import { createLogger } from "../logger.js";
+import type { ReviewInput } from "../review/schema.js";
+import type { LlmAdapter, LlmReviewResponse } from "./adapter.js";
 import { ClaudeCliAdapter } from "./claude-cli.js";
 import { CodexCliAdapter } from "./codex-cli.js";
 import { OpenAiApiAdapter } from "./openai-api.js";
 
-const log = pino({ name: "llm" });
+const log = createLogger("llm");
 
 type Provider = NonNullable<AppConfig["llm"]["fallback_provider"]>;
 
@@ -38,7 +38,7 @@ class FallbackAdapter implements LlmAdapter {
     private readonly fallbackName: Provider
   ) {}
 
-  async review(input: ReviewInput): Promise<ReviewResult> {
+  async review(input: ReviewInput): Promise<LlmReviewResponse> {
     try {
       return await this.primary.review(input);
     } catch (err) {
