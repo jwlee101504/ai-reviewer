@@ -13,6 +13,7 @@ export async function publishReviewResult(args: {
   repo: string;
   repoId: number;
   pullNumber: number;
+  fromSha: string;
   headSha: string;
   previousSummaryCommentId: number | null;
   result: ReviewResult;
@@ -34,17 +35,37 @@ export async function publishReviewResult(args: {
     repo: args.repo,
     issueNumber: args.pullNumber,
     previousCommentId: args.previousSummaryCommentId,
-    body: formatSummary(args.result.summary, newFindings.length)
+    body: formatSummary({
+      summary: args.result.summary,
+      fromSha: args.fromSha,
+      headSha: args.headSha,
+      totalFindingCount: args.result.findings.length,
+      newFindingCount: newFindings.length
+    })
   });
 
   markReviewed(args.db, args.repoId, args.pullNumber, args.headSha, summaryCommentId);
 }
 
-function formatSummary(summary: string, newFindingCount: number): string {
+export function formatSummary(args: {
+  summary: string;
+  fromSha: string;
+  headSha: string;
+  totalFindingCount: number;
+  newFindingCount: number;
+}): string {
   return `<!-- ai-review-bot-summary -->
 ## AI Review Summary
 
-${summary}
+${args.summary}
 
-New findings posted: ${newFindingCount}`;
+Reviewed range: \`${shortSha(args.fromSha)}...${shortSha(args.headSha)}\`
+Findings from this run: ${args.totalFindingCount}
+New findings posted: ${args.newFindingCount}
+
+This comment is updated after each completed review.`;
+}
+
+function shortSha(sha: string): string {
+  return sha.slice(0, 7);
 }

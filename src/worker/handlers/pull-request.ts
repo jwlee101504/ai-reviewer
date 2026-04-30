@@ -103,6 +103,7 @@ export async function handlePullRequestJob(args: {
     repo: target.repoName,
     repoId: target.repo.id,
     pullNumber: target.pullNumber,
+    fromSha: target.fromSha,
     headSha: target.headSha,
     previousSummaryCommentId: target.pr.last_summary_comment_id,
     result
