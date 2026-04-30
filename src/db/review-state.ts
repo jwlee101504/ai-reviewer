@@ -20,8 +20,13 @@ export type PullRequestRecord = {
   last_summary_comment_id: number | null;
 };
 
+function repoCacheBase(): string {
+  const envBase = process.env.REPO_CACHE_DIR;
+  return envBase ? path.resolve(envBase) : path.resolve("repos", "cache");
+}
+
 export function upsertRepository(db: Db, owner: string, name: string, installationId: number): RepoRecord {
-  const clonePath = path.join("repos", "cache", `${owner}__${name}`);
+  const clonePath = path.join(repoCacheBase(), `${owner}__${name}`);
   db.prepare(`
     INSERT INTO repositories (owner, name, installation_id, clone_path)
     VALUES (?, ?, ?, ?)

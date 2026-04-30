@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseUnifiedDiff } from "./diff.js";
-import { filterFindings } from "./filter.js";
+import { parseUnifiedDiff } from "../../src/review/diff.js";
+import { filterFindings } from "../../src/review/filter.js";
 
 describe("diff parsing and finding filtering", () => {
   it("keeps only findings on added lines", () => {

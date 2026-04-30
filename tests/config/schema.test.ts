@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigSchema } from "./schema.js";
+import { ConfigSchema } from "../../src/config/schema.js";
 
 describe("ConfigSchema", () => {
   it("applies defaults when optional sections are missing", () => {
