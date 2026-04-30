@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReviewPrompt } from "./prompt.js";
+import { buildReviewPrompt } from "../../src/review/prompt.js";
 
 describe("buildReviewPrompt", () => {
   it("includes language instructions for analysis and response output", () => {
