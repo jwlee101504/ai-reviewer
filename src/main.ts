@@ -17,7 +17,7 @@ async function main(): Promise<void> {
   const db = openDb();
   migrate(db);
 
-  const app = Fastify({ logger: loggerOptions("http") });
+  const app = Fastify({ logger: loggerOptions("http"), disableRequestLogging: true });
   await registerHealth(app);
   await registerWebhook(app, db, requiredEnv("GITHUB_WEBHOOK_SECRET"));
 
