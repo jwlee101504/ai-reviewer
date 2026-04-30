@@ -54,13 +54,15 @@ export async function registerWebhook(app: FastifyInstance, db: Db, secret: stri
       return reply.code(401).send({ error: "invalid signature" });
     }
 
+    const payloadSummary = summarizeWebhookPayload(rawBody);
     const id = enqueueJob(db, eventType, rawBody);
     log.info({
+      stage: "webhook.queued",
       jobId: id,
       eventType,
       delivery: request.headers["x-github-delivery"],
-      ...summarizeWebhookPayload(rawBody)
-    }, "webhook accepted");
+      ...payloadSummary
+    }, formatWebhookQueuedMessage(eventType, payloadSummary));
     return reply.code(202).send({ queued: true, id });
   });
 }
@@ -75,7 +77,16 @@ function verifySignature(secret: string, body: string, signature: string): { ok:
   return { ok: crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature)), expected };
 }
 
-function summarizeWebhookPayload(rawBody: string): Record<string, unknown> {
+export type WebhookPayloadSummary = {
+  action?: string;
+  repository?: string;
+  pullNumber?: number;
+  baseSha?: string;
+  headSha?: string;
+  payloadParseFailed?: boolean;
+};
+
+export function summarizeWebhookPayload(rawBody: string): WebhookPayloadSummary {
   try {
     const payload = JSON.parse(rawBody) as {
       action?: string;
@@ -93,4 +104,12 @@ function summarizeWebhookPayload(rawBody: string): Record<string, unknown> {
   } catch {
     return { payloadParseFailed: true };
   }
+}
+
+export function formatWebhookQueuedMessage(eventType: string, summary: WebhookPayloadSummary): string {
+  const scope = summary.repository && summary.pullNumber
+    ? `${summary.repository}#${summary.pullNumber}`
+    : summary.repository ?? "unknown repository";
+  const action = summary.action ? ` ${summary.action}` : "";
+  return `github ${eventType}${action} queued for ${scope}`;
 }

@@ -32,29 +32,45 @@ export function startWorker(args: WorkerDeps & { intervalMs?: number }): NodeJS.
     if (!job) return;
 
     const startedAt = Date.now();
+    const summary = summarizeJobPayload(job.payload_json);
     try {
-      log.info({ jobId: job.id, eventType: job.event_type, attempts: job.attempts }, "job started");
+      log.info({
+        stage: "job.started",
+        jobId: job.id,
+        eventType: job.event_type,
+        attempts: job.attempts,
+        ...summary
+      }, formatJobMessage("started", job.event_type, summary));
       const handler = handlers[job.event_type];
       if (!handler) {
-        log.warn({ jobId: job.id, eventType: job.event_type }, "no handler for event type, skipping");
+        log.warn({
+          stage: "job.skipped",
+          jobId: job.id,
+          eventType: job.event_type,
+          ...summary
+        }, formatJobMessage("skipped: no handler", job.event_type, summary));
       } else {
         await handler(args, JSON.parse(job.payload_json));
       }
       completeJob(args.db, job.id);
       log.info({
+        stage: "job.completed",
         jobId: job.id,
         eventType: job.event_type,
         attempts: job.attempts,
-        durationMs: Date.now() - startedAt
-      }, "job completed");
+        durationMs: Date.now() - startedAt,
+        ...summary
+      }, formatJobMessage("completed", job.event_type, summary));
     } catch (error) {
       log.error({
+        stage: "job.failed",
         err: error,
         jobId: job.id,
         eventType: job.event_type,
         attempts: job.attempts,
-        durationMs: Date.now() - startedAt
-      }, "job failed");
+        durationMs: Date.now() - startedAt,
+        ...summary
+      }, formatJobMessage("failed", job.event_type, summary));
       failJob(args.db, job.id, job.attempts, error);
     }
   };
@@ -64,4 +80,38 @@ export function startWorker(args: WorkerDeps & { intervalMs?: number }): NodeJS.
   }, args.intervalMs ?? WORKER_TICK_INTERVAL_MS);
   void tick();
   return timer;
+}
+
+type JobPayloadSummary = {
+  action?: string;
+  repository?: string;
+  pullNumber?: number;
+  headSha?: string;
+};
+
+function summarizeJobPayload(payloadJson: string): JobPayloadSummary {
+  try {
+    const payload = JSON.parse(payloadJson) as {
+      action?: string;
+      repository?: { full_name?: string };
+      pull_request?: { number?: number; head?: { sha?: string } };
+      issue?: { number?: number; pull_request?: unknown };
+    };
+    return {
+      action: payload.action,
+      repository: payload.repository?.full_name,
+      pullNumber: payload.pull_request?.number ?? (payload.issue?.pull_request ? payload.issue.number : undefined),
+      headSha: payload.pull_request?.head?.sha
+    };
+  } catch {
+    return {};
+  }
+}
+
+function formatJobMessage(status: string, eventType: string, summary: JobPayloadSummary): string {
+  const scope = summary.repository && summary.pullNumber
+    ? `${summary.repository}#${summary.pullNumber}`
+    : summary.repository ?? "unknown repository";
+  const action = summary.action ? ` ${summary.action}` : "";
+  return `${eventType}${action} job ${status} for ${scope}`;
 }

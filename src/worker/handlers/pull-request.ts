@@ -62,17 +62,22 @@ export async function handlePullRequestJob(args: {
 
   const target = prepareReviewTarget(db, payload);
   if (target.pr.paused) {
-    log.info(reviewLogFields(target), "review skipped because pull request is paused");
+    log.info({
+      stage: "review.skipped",
+      reason: "pull request is paused",
+      ...reviewLogFields(target)
+    }, formatReviewMessage(target, "skipped: pull request is paused"));
     return;
   }
 
   const reviewStartedAt = Date.now();
   log.info({
+    stage: "review.started",
     ...reviewLogFields(target),
     action: payload.action,
     fromSha: target.fromSha,
     headSha: target.headSha
-  }, "review started");
+  }, formatReviewMessage(target, "started"));
 
   await ensureReviewCache(target);
 
@@ -87,7 +92,11 @@ export async function handlePullRequestJob(args: {
     throw error;
   }
   if (!diff.diff.trim()) {
-    log.info(reviewLogFields(target), "review skipped because diff is empty");
+    log.info({
+      stage: "review.skipped",
+      reason: "diff is empty",
+      ...reviewLogFields(target)
+    }, formatReviewMessage(target, "skipped: diff is empty"));
     return;
   }
 
@@ -109,11 +118,12 @@ export async function handlePullRequestJob(args: {
     result
   });
   log.info({
+    stage: "review.published",
     ...reviewLogFields(target),
     findings: result.findings.length,
     durationMs: Date.now() - publishStartedAt,
     totalDurationMs: Date.now() - reviewStartedAt
-  }, "review published");
+  }, formatReviewMessage(target, "published"));
 }
 
 function prepareReviewTarget(db: Db, payload: PullRequestPayload): ReviewTarget {
@@ -153,10 +163,11 @@ async function ensureReviewCache(target: ReviewTarget): Promise<void> {
     headSha: target.headSha
   });
   log.info({
+    stage: "repo.cache.ready",
     ...reviewLogFields(target),
     clonePath: target.repo.clone_path,
     durationMs: Date.now() - cacheStartedAt
-  }, "repository cache ready");
+  }, formatReviewMessage(target, "repository cache ready"));
 }
 
 async function buildReviewDiff(target: ReviewTarget, config: AppConfig): Promise<DiffInfo> {
@@ -168,12 +179,13 @@ async function buildReviewDiff(target: ReviewTarget, config: AppConfig): Promise
     config
   });
   log.info({
+    stage: "review.diff.ready",
     ...reviewLogFields(target),
     changedFiles: diff.changedFiles.length,
     changedLines: diff.changedLines.size,
     diffChars: diff.diff.length,
     durationMs: Date.now() - diffStartedAt
-  }, "diff built");
+  }, formatReviewMessage(target, "diff built"));
   return diff;
 }
 
@@ -181,11 +193,12 @@ function collectReviewContext(target: ReviewTarget, diff: DiffInfo): string {
   const contextStartedAt = Date.now();
   const context = collectContext(target.repo.clone_path, diff.changedFiles);
   log.info({
+    stage: "review.context.ready",
     ...reviewLogFields(target),
     contextChars: context.length,
     changedFiles: diff.changedFiles.length,
     durationMs: Date.now() - contextStartedAt
-  }, "review context collected");
+  }, formatReviewMessage(target, "context collected"));
   return context;
 }
 
@@ -209,6 +222,7 @@ async function runReview(
     responseLanguage: config.review.response_language
   });
   log.info({
+    stage: "review.llm.completed",
     ...reviewLogFields(target),
     provider: llmResponse.provider,
     model: llmResponse.model,
@@ -216,7 +230,7 @@ async function runReview(
     inputChars: llmResponse.textUsage?.inputChars,
     outputChars: llmResponse.textUsage?.outputChars,
     totalChars: llmResponse.textUsage?.totalChars
-  }, "llm review completed");
+  }, formatReviewMessage(target, "llm completed"));
 
   const rawResult = llmResponse.result;
   const result = {
@@ -228,16 +242,21 @@ async function runReview(
     })
   };
   log.info({
+    stage: "review.findings.filtered",
     ...reviewLogFields(target),
     rawFindings: rawResult.findings.length,
     filteredFindings: result.findings.length,
     minConfidence: config.review.min_confidence
-  }, "review findings filtered");
+  }, formatReviewMessage(target, "findings filtered"));
   return result;
 }
 
 async function publishSkipSummary(db: Db, target: ReviewTarget, reason: string): Promise<void> {
-  log.warn({ ...reviewLogFields(target), reason }, "review skipped");
+  log.warn({
+    stage: "review.skipped",
+    ...reviewLogFields(target),
+    reason
+  }, formatReviewMessage(target, "skipped"));
   const client = await githubClient(target.installationId);
   const commentId = await upsertSummaryComment({
     client,
@@ -256,6 +275,10 @@ function reviewLogFields(target: ReviewTarget): { owner: string; repo: string; p
     repo: target.repoName,
     pullNumber: target.pullNumber
   };
+}
+
+function formatReviewMessage(target: ReviewTarget, status: string): string {
+  return `review ${status} for ${target.owner}/${target.repoName}#${target.pullNumber}`;
 }
 
 function formatSkipSummary(reason: string): string {
