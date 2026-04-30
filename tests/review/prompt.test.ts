@@ -18,5 +18,7 @@ describe("buildReviewPrompt", () => {
 
     expect(prompt).toContain("Analyze code, reasoning, and tradeoffs in English.");
     expect(prompt).toContain("Write all human-facing JSON string values in Korean");
+    expect(prompt).toContain("Trace the changed path through direct callers");
+    expect(prompt).toContain("Write a summary that shows what was actually reviewed");
   });
 });
