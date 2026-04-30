@@ -9,6 +9,7 @@ services:
       CONFIG_PATH: /app/config.yml
       GITHUB_PRIVATE_KEY_PATH: /run/secrets/github_private_key
       PORT: 3000
+      REPO_CACHE_DIR: /app/repos/cache
     ports:
       - "127.0.0.1:${PORT:-3000}:3000"
     volumes:
