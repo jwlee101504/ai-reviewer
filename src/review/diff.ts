@@ -35,6 +35,15 @@ export async function ensureRepoCache(args: {
   }
 }
 
+export async function isShaReachable(repoPath: string, sha: string): Promise<boolean> {
+  try {
+    await execa("git", ["cat-file", "-e", `${sha}^{commit}`], { cwd: repoPath });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function buildDiff(args: {
   repoPath: string;
   fromSha: string;

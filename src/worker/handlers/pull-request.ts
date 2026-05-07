@@ -12,7 +12,7 @@ import { upsertSummaryComment } from "../../github/comments.js";
 import { publicRemoteUrl } from "../../github/refs.js";
 import { createLogger } from "../../logger.js";
 import { collectContext } from "../../review/context.js";
-import { buildDiff, ensureRepoCache, type DiffInfo } from "../../review/diff.js";
+import { buildDiff, ensureRepoCache, isShaReachable, type DiffInfo } from "../../review/diff.js";
 import { isReviewSkipError } from "../../review/errors.js";
 import { filterFindings } from "../../review/filter.js";
 import { publishReviewResult } from "../../review/publisher.js";
@@ -80,6 +80,7 @@ export async function handlePullRequestJob(args: {
   }, formatReviewMessage(target, "started"));
 
   await ensureReviewCache(target);
+  target.fromSha = await resolveFromSha(target, payload.pull_request.base.sha);
 
   let diff;
   try {
@@ -168,6 +169,18 @@ async function ensureReviewCache(target: ReviewTarget): Promise<void> {
     clonePath: target.repo.clone_path,
     durationMs: Date.now() - cacheStartedAt
   }, formatReviewMessage(target, "repository cache ready"));
+}
+
+async function resolveFromSha(target: ReviewTarget, baseSha: string): Promise<string> {
+  if (target.fromSha === baseSha) return baseSha;
+  if (await isShaReachable(target.repo.clone_path, target.fromSha)) return target.fromSha;
+  log.warn({
+    stage: "review.from_sha.fallback",
+    ...reviewLogFields(target),
+    requestedFromSha: target.fromSha,
+    fallbackFromSha: baseSha
+  }, formatReviewMessage(target, "last_reviewed_sha unreachable, falling back to base_sha"));
+  return baseSha;
 }
 
 async function buildReviewDiff(target: ReviewTarget, config: AppConfig): Promise<DiffInfo> {
