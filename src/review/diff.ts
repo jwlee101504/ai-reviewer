@@ -6,6 +6,7 @@ import simpleGit from "simple-git";
 import { minimatch } from "minimatch";
 import type { AppConfig } from "../config/schema.js";
 import { ReviewSkipError } from "./errors.js";
+import { withPathLock } from "./path-lock.js";
 
 const GIT_DIFF_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
 const GIT_TOP_LEVEL_LOCK_FILES = [
@@ -34,20 +35,22 @@ export async function ensureRepoCache(args: {
   clonePath: string;
   headSha: string;
 }): Promise<{ clearedLocks: string[] }> {
-  fs.mkdirSync(path.dirname(args.clonePath), { recursive: true });
-  if (!fs.existsSync(path.join(args.clonePath, ".git"))) {
-    await simpleGitWithToken(args.token).clone(args.remoteUrl, args.clonePath, ["--no-checkout"]);
-  }
-  const clearedLocks = await clearStaleGitLocks(args.clonePath);
-  const git = simpleGit(args.clonePath);
-  try {
-    await git.remote(["set-url", "origin", args.remoteUrl]);
-    await simpleGitWithToken(args.token, args.clonePath).fetch(["--all", "--prune"]);
-    await git.checkout(args.headSha);
-  } finally {
-    await git.remote(["set-url", "origin", args.publicUrl]);
-  }
-  return { clearedLocks };
+  return withPathLock(args.clonePath, async () => {
+    fs.mkdirSync(path.dirname(args.clonePath), { recursive: true });
+    if (!fs.existsSync(path.join(args.clonePath, ".git"))) {
+      await simpleGitWithToken(args.token).clone(args.remoteUrl, args.clonePath, ["--no-checkout"]);
+    }
+    const clearedLocks = await clearStaleGitLocks(args.clonePath);
+    const git = simpleGit(args.clonePath);
+    try {
+      await git.remote(["set-url", "origin", args.remoteUrl]);
+      await simpleGitWithToken(args.token, args.clonePath).fetch(["--all", "--prune"]);
+      await git.checkout(args.headSha);
+    } finally {
+      await git.remote(["set-url", "origin", args.publicUrl]);
+    }
+    return { clearedLocks };
+  });
 }
 
 export async function clearStaleGitLocks(

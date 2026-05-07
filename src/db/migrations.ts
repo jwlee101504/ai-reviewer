@@ -66,4 +66,13 @@ export function migrate(db: Db): void {
 
     CREATE INDEX IF NOT EXISTS idx_jobs_ready ON jobs(status, next_run_at, locked_at);
   `);
+
+  ensureColumn(db, "repositories", "last_used_at", "TEXT");
+  db.exec("UPDATE repositories SET last_used_at = CURRENT_TIMESTAMP WHERE last_used_at IS NULL");
+}
+
+function ensureColumn(db: Db, table: string, column: string, definition: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (cols.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }

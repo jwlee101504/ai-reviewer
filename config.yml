@@ -24,3 +24,7 @@ tools:
 fix:
   enabled: true
   push_mode: new_branch
+
+cache:
+  repo_max_age_days: 30
+  gc_interval_hours: 24

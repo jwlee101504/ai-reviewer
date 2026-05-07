@@ -7,6 +7,7 @@ export type RepoRecord = {
   name: string;
   installation_id: number;
   clone_path: string;
+  last_used_at: string | null;
 };
 
 export type PullRequestRecord = {
@@ -28,11 +29,12 @@ function repoCacheBase(): string {
 export function upsertRepository(db: Db, owner: string, name: string, installationId: number): RepoRecord {
   const clonePath = path.join(repoCacheBase(), `${owner}__${name}`);
   db.prepare(`
-    INSERT INTO repositories (owner, name, installation_id, clone_path)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO repositories (owner, name, installation_id, clone_path, last_used_at)
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(owner, name) DO UPDATE SET
       installation_id = excluded.installation_id,
-      clone_path = excluded.clone_path
+      clone_path = excluded.clone_path,
+      last_used_at = CURRENT_TIMESTAMP
   `).run(owner, name, installationId, clonePath);
 
   return db.prepare("SELECT * FROM repositories WHERE owner = ? AND name = ?").get(owner, name) as RepoRecord;
