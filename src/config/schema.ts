@@ -25,6 +25,10 @@ export const ConfigSchema = z.object({
   fix: z.object({
     enabled: z.boolean().default(false),
     push_mode: z.enum(["new_branch", "same_pr"]).default("new_branch")
+  }).default({}),
+  cache: z.object({
+    repo_max_age_days: z.number().int().positive().default(30),
+    gc_interval_hours: z.number().int().positive().default(24)
   }).default({})
 });
 
