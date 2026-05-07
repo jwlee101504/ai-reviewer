@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { evictStaleRepoCaches } from "../../src/db/cache-gc.js";
 import { migrate } from "../../src/db/migrations.js";
 import { upsertRepository } from "../../src/db/review-state.js";
+import { withPathLock } from "../../src/review/path-lock.js";
 import type { Db } from "../../src/db/connection.js";
 
 async function makeRepoCache(workspace: string, owner: string, name: string): Promise<string> {
@@ -86,6 +87,31 @@ describe("evictStaleRepoCaches", () => {
     await evictStaleRepoCaches({ db, maxAgeDays: 30 });
     upsertRepository(db, "alice", "old", 1);
 
+    const row = db.prepare("SELECT last_used_at FROM repositories WHERE id = ?").get(repo.id) as { last_used_at: string | null };
+    expect(row.last_used_at).not.toBeNull();
+  });
+
+  it("skips eviction when last_used_at is re-armed before the path lock is acquired", async () => {
+    const repo = upsertRepository(db, "alice", "old", 1);
+    const repoPath = await makeRepoCache(workspace, "alice", "old");
+    setLastUsedAt(db, repo.id, 60);
+
+    let releaseBlocker: () => void = () => {};
+    const blocked = new Promise<void>((resolve) => {
+      releaseBlocker = resolve;
+    });
+    const blocker = withPathLock(repo.clone_path, async () => {
+      await blocked;
+    });
+
+    const gcPromise = evictStaleRepoCaches({ db, maxAgeDays: 30 });
+    upsertRepository(db, "alice", "old", 1);
+    releaseBlocker();
+    await blocker;
+    const result = await gcPromise;
+
+    expect(result.evicted).toEqual([]);
+    await expect(fs.access(repoPath)).resolves.toBeUndefined();
     const row = db.prepare("SELECT last_used_at FROM repositories WHERE id = ?").get(repo.id) as { last_used_at: string | null };
     expect(row.last_used_at).not.toBeNull();
   });
