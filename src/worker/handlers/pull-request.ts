@@ -156,13 +156,21 @@ async function ensureReviewCache(target: ReviewTarget): Promise<void> {
   const token = await getInstallationToken(target.installationId);
   const cacheStartedAt = Date.now();
   const remoteUrl = publicRemoteUrl(target.owner, target.repoName);
-  await ensureRepoCache({
+  const { clearedLocks } = await ensureRepoCache({
     remoteUrl,
     token,
     publicUrl: remoteUrl,
     clonePath: target.repo.clone_path,
     headSha: target.headSha
   });
+  if (clearedLocks.length > 0) {
+    log.warn({
+      stage: "repo.cache.locks_cleared",
+      ...reviewLogFields(target),
+      clonePath: target.repo.clone_path,
+      clearedLocks
+    }, formatReviewMessage(target, `cleared ${clearedLocks.length} stale git lock file(s)`));
+  }
   log.info({
     stage: "repo.cache.ready",
     ...reviewLogFields(target),
