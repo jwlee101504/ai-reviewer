@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { evictStaleRepoCaches } from "../../src/db/cache-gc.js";
 import { migrate } from "../../src/db/migrations.js";
 import { upsertRepository } from "../../src/db/review-state.js";
@@ -114,6 +114,29 @@ describe("evictStaleRepoCaches", () => {
     await expect(fs.access(repoPath)).resolves.toBeUndefined();
     const row = db.prepare("SELECT last_used_at FROM repositories WHERE id = ?").get(repo.id) as { last_used_at: string | null };
     expect(row.last_used_at).not.toBeNull();
+  });
+
+  it("leaves the row armed when fs.rm fails so the next tick retries", async () => {
+    const repo = upsertRepository(db, "alice", "old", 1);
+    const repoPath = await makeRepoCache(workspace, "alice", "old");
+    setLastUsedAt(db, repo.id, 60);
+    const before = db.prepare("SELECT last_used_at AS lastUsedAt FROM repositories WHERE id = ?").get(repo.id) as { lastUsedAt: string };
+
+    const rmSpy = vi.spyOn(fs, "rm").mockRejectedValueOnce(new Error("simulated rm failure"));
+    try {
+      const first = await evictStaleRepoCaches({ db, maxAgeDays: 30 });
+      expect(first.evicted).toEqual([]);
+    } finally {
+      rmSpy.mockRestore();
+    }
+
+    const after = db.prepare("SELECT last_used_at AS lastUsedAt FROM repositories WHERE id = ?").get(repo.id) as { lastUsedAt: string };
+    expect(after.lastUsedAt).toBe(before.lastUsedAt);
+    await expect(fs.access(repoPath)).resolves.toBeUndefined();
+
+    const second = await evictStaleRepoCaches({ db, maxAgeDays: 30 });
+    expect(second.evicted.map((r) => r.id)).toEqual([repo.id]);
+    await expect(fs.access(repoPath)).rejects.toBeDefined();
   });
 
   it("preserves dependent pull_requests rows (clone files only are deleted)", async () => {
