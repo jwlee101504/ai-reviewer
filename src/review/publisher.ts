@@ -1,5 +1,5 @@
 import type { Db } from "../db/connection.js";
-import { insertNewFindings } from "../db/findings.js";
+import { findNewFindings, insertNewFindings } from "../db/findings.js";
 import { markReviewed } from "../db/review-state.js";
 import { upsertSummaryComment } from "../github/comments.js";
 import { publishReview } from "../github/reviews.js";
@@ -18,7 +18,7 @@ export async function publishReviewResult(args: {
   previousSummaryCommentId: number | null;
   result: ReviewResult;
 }): Promise<void> {
-  const newFindings = insertNewFindings(args.db, args.repoId, args.pullNumber, args.result.findings);
+  const newFindings = findNewFindings(args.db, args.repoId, args.pullNumber, args.result.findings);
   await publishReview({
     client: args.client,
     owner: args.owner,
@@ -28,6 +28,7 @@ export async function publishReviewResult(args: {
     findings: newFindings,
     summary: args.result.summary
   });
+  insertNewFindings(args.db, args.repoId, args.pullNumber, newFindings);
 
   const summaryCommentId = await upsertSummaryComment({
     client: args.client,

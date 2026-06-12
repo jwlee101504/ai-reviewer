@@ -23,8 +23,11 @@ type IssueCommentPayload = {
   };
   comment: {
     body: string;
+    author_association?: string;
   };
 };
+
+const TRUSTED_AUTHOR_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
 
 export async function handleIssueCommentJob(args: {
   db: Db;
@@ -37,6 +40,7 @@ export async function handleIssueCommentJob(args: {
   const body = payload.comment.body.trim().toLowerCase();
   const mention = `@${botName.toLowerCase()}`;
   if (!body.startsWith(mention)) return;
+  if (!isTrustedCommentAuthor(payload.comment.author_association)) return;
 
   const owner = payload.repository.owner.login;
   const repoName = payload.repository.name;
@@ -79,4 +83,8 @@ export async function handleIssueCommentJob(args: {
       head: { sha: headSha }
     }
   });
+}
+
+export function isTrustedCommentAuthor(authorAssociation: string | undefined): boolean {
+  return Boolean(authorAssociation && TRUSTED_AUTHOR_ASSOCIATIONS.has(authorAssociation));
 }

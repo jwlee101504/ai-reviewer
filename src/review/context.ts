@@ -18,20 +18,20 @@ const MAX_TEST_SEARCH_DEPTH = 8;
 const MAX_TREE_ENTRIES = 120;
 
 export function collectContext(repoPath: string, changedFiles: string[]): string {
-  const packageJson = summarizePackageJson(readIfExists(path.join(repoPath, "package.json")));
-  const readme = readFirstExisting(repoPath, ["README.md", "readme.md"]);
-  const tsconfig = readIfExists(path.join(repoPath, "tsconfig.json"));
-  const tree = summarizeDirectoryTree(repoPath);
-  const testFiles = findTestFiles(repoPath);
+  const repoRoot = fs.realpathSync(repoPath);
+  const packageJson = summarizePackageJson(readRepoFile(repoRoot, "package.json"));
+  const readme = readFirstExisting(repoRoot, ["README.md", "readme.md"]);
+  const tsconfig = readRepoFile(repoRoot, "tsconfig.json");
+  const tree = summarizeDirectoryTree(repoRoot);
+  const testFiles = findTestFiles(repoRoot);
   const relatedTests = findRelatedTests(changedFiles, testFiles);
   const snippets = changedFiles.slice(0, 20).map((file) => {
-    const absolute = path.join(repoPath, file);
-    const content = readIfExists(absolute);
+    const content = readRepoFile(repoRoot, file);
     if (!content) return "";
     return `\n## ${file}\n\`\`\`\n${content.slice(0, 12_000)}\n\`\`\`\n`;
   });
   const relatedTestSnippets = relatedTests.slice(0, 5).map((file) => {
-    const content = readIfExists(path.join(repoPath, file));
+    const content = readRepoFile(repoRoot, file);
     if (!content) return "";
     return `\n## ${file}\n\`\`\`\n${content.slice(0, 8_000)}\n\`\`\`\n`;
   });
@@ -70,9 +70,9 @@ function summarizePackageJson(content: string | undefined): string | undefined {
   }
 }
 
-function readFirstExisting(repoPath: string, files: string[]): string | undefined {
+function readFirstExisting(repoRoot: string, files: string[]): string | undefined {
   for (const file of files) {
-    const content = readIfExists(path.join(repoPath, file));
+    const content = readRepoFile(repoRoot, file);
     if (content) return content;
   }
   return undefined;
@@ -173,11 +173,27 @@ function toRepoPath(file: string): string {
   return file.split(path.sep).join("/");
 }
 
-function readIfExists(file: string): string | undefined {
+function readRepoFile(repoRoot: string, relativePath: string): string | undefined {
   try {
-    if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) return undefined;
-    return fs.readFileSync(file, "utf8");
+    const absolute = safeRepoPath(repoRoot, relativePath);
+    if (!absolute) return undefined;
+    const stat = fs.lstatSync(absolute);
+    if (!stat.isFile() || stat.isSymbolicLink()) return undefined;
+    const real = fs.realpathSync(absolute);
+    if (!isInsideRepo(repoRoot, real)) return undefined;
+    return fs.readFileSync(real, "utf8");
   } catch {
     return undefined;
   }
+}
+
+function safeRepoPath(repoRoot: string, relativePath: string): string | undefined {
+  if (path.isAbsolute(relativePath) || relativePath.includes("\0")) return undefined;
+  const absolute = path.resolve(repoRoot, relativePath);
+  return isInsideRepo(repoRoot, absolute) ? absolute : undefined;
+}
+
+function isInsideRepo(repoRoot: string, target: string): boolean {
+  const relative = path.relative(repoRoot, target);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
