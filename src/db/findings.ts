@@ -23,3 +23,22 @@ export function insertNewFindings(db: Db, repoId: number, prNumber: number, find
   }
   return inserted;
 }
+
+export function findNewFindings(db: Db, repoId: number, prNumber: number, findings: Finding[]): Finding[] {
+  const select = db.prepare(`
+    SELECT 1 FROM findings
+    WHERE repo_id = ? AND pr_number = ? AND fingerprint = ?
+  `);
+  const seen = new Set<string>();
+
+  return findings.flatMap((finding) => {
+    const fingerprint = fingerprintFinding(finding);
+    if (seen.has(fingerprint)) return [];
+
+    const exists = select.get(repoId, prNumber, fingerprint);
+    if (exists) return [];
+
+    seen.add(fingerprint);
+    return [{ ...finding, fingerprint }];
+  });
+}

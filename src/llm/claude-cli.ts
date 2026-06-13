@@ -8,7 +8,8 @@ export class ClaudeCliAdapter implements LlmAdapter {
   async review(input: ReviewInput): Promise<LlmReviewResponse> {
     const startedAt = Date.now();
     const prompt = buildFullPrompt(input);
-    const { stdout } = await execa("claude", ["--print", prompt], {
+    const { stdout } = await execa("claude", ["--print"], {
+      input: prompt,
       maxBuffer: CLI_MAX_BUFFER_BYTES
     });
     return {

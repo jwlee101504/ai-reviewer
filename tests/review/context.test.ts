@@ -57,6 +57,41 @@ describe("collectContext", () => {
     expect(context).toContain("src/generated/file-0.test.ts");
     expect(context).not.toContain("late related test body");
   });
+
+  it("does not read changed-file symlinks that resolve outside the repo", () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-review-context-"));
+    const secretDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-review-secret-"));
+    const secretFile = path.join(secretDir, "secret.txt");
+    fs.writeFileSync(secretFile, "SUPER_SECRET_TOKEN");
+    fs.mkdirSync(path.join(tempDir, "src"), { recursive: true });
+
+    try {
+      fs.symlinkSync(secretFile, path.join(tempDir, "src", "leak.txt"));
+    } catch {
+      fs.rmSync(secretDir, { recursive: true, force: true });
+      return;
+    }
+
+    try {
+      const context = collectContext(tempDir, ["src/leak.txt"]);
+      expect(context).not.toContain("SUPER_SECRET_TOKEN");
+    } finally {
+      fs.rmSync(secretDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not read changed paths outside the repo root", () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-review-context-"));
+    const secretDir = fs.mkdtempSync(path.join(os.tmpdir(), "ai-review-secret-"));
+    fs.writeFileSync(path.join(secretDir, "secret.txt"), "OUTSIDE_REPO_SECRET");
+
+    try {
+      const context = collectContext(tempDir, [`../${path.basename(secretDir)}/secret.txt`]);
+      expect(context).not.toContain("OUTSIDE_REPO_SECRET");
+    } finally {
+      fs.rmSync(secretDir, { recursive: true, force: true });
+    }
+  });
 });
 
 function write(relativePath: string, content: string): void {
