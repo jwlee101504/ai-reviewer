@@ -19,6 +19,8 @@ export class CodexCliAdapter implements LlmAdapter {
         "--skip-git-repo-check",
         "--sandbox",
         "read-only",
+        "--model",
+        "gpt-5.5-codex",
         "--cd",
         input.repoPath,
         "--output-last-message",
